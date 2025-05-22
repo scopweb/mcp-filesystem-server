@@ -1,3 +1,15 @@
 .aider*
 .opencode*
 OpenCode.md
+# Executables
+*.exe
+mcp-filesystem-server
+mcp-filesystem-server-enhanced
+
+# Scripts de configuración local
+fix-git-remotes.*
+verify-status.*
+
+# Archivos temporales  
+FIXES_NEEDED.md
+FORK-GUIDE.md
