@@ -139,15 +139,210 @@ func (fs *FilesystemHandler) analyzeContent(content, oldText string) interface{}
 
 // performIntelligentEdit performs intelligent text replacement
 func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText string, analysis interface{}) (*EditResult, error) {
-	newContent := strings.ReplaceAll(content, oldText, newText)
-	count := strings.Count(content, oldText)
+	// Si oldText está vacío, retornar error
+	if oldText == "" {
+		return nil, fmt.Errorf("old_text cannot be empty")
+	}
 
+	// Normalizar saltos de línea para compatibilidad Windows/Unix
+	content = normalizeLineEndings(content)
+	oldText = normalizeLineEndings(oldText)
+	newText = normalizeLineEndings(newText)
+
+	// Contador inicial para verificar si hay coincidencias exactas
+	exactMatches := strings.Count(content, oldText)
+	
+	// Si hay coincidencias exactas, hacer reemplazo directo
+	if exactMatches > 0 {
+		newContent := strings.ReplaceAll(content, oldText, newText)
+		
+		// Calcular líneas afectadas
+		linesAffected := 0
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, oldText) {
+				linesAffected++
+			}
+		}
+
+		return &EditResult{
+			ModifiedContent:  newContent,
+			ReplacementCount: exactMatches,
+			MatchConfidence:  "high",
+			LinesAffected:    linesAffected,
+		}, nil
+	}
+
+	// Si no hay coincidencias exactas, intentar búsqueda flexible
+	lines := strings.Split(content, "\n")
+	newLines := make([]string, 0, len(lines))
+	replacements := 0
+	linesAffected := 0
+	
+	// Intentar con diferentes normalizaciones
+	normalizedOld := strings.TrimSpace(oldText)
+	
+	// Primero intentar línea por línea
+	for i, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		replaced := false
+		
+		// 1. Búsqueda exacta de línea completa (ignorando espacios)
+		if trimmedLine == normalizedOld {
+			// Preservar indentación original
+			indent := getIndentation(line)
+			newLines = append(newLines, indent+strings.TrimSpace(newText))
+			replacements++
+			linesAffected++
+			replaced = true
+		} else if strings.Contains(line, oldText) {
+			// 2. Reemplazo parcial exacto dentro de la línea
+			newLine := strings.ReplaceAll(line, oldText, newText)
+			newLines = append(newLines, newLine)
+			replacements += strings.Count(line, oldText)
+			linesAffected++
+			replaced = true
+		} else if strings.Contains(line, normalizedOld) {
+			// 3. Reemplazo con texto normalizado
+			newLine := strings.ReplaceAll(line, normalizedOld, newText)
+			newLines = append(newLines, newLine)
+			replacements += strings.Count(line, normalizedOld)
+			linesAffected++
+			replaced = true
+		}
+		
+		if !replaced {
+			// 4. Intentar con normalización más agresiva
+			lineNormalized := normalizeWhitespace(line)
+			oldNormalized := normalizeWhitespace(oldText)
+			
+			if strings.Contains(lineNormalized, oldNormalized) {
+				// Encontrar la posición y reemplazar manteniendo formato original
+				idx := strings.Index(lineNormalized, oldNormalized)
+				if idx >= 0 {
+					// Reconstruir línea con el reemplazo
+					result := reconstructLine(line, oldText, newText, idx)
+					newLines = append(newLines, result)
+					replacements++
+					linesAffected++
+					replaced = true
+				}
+			}
+		}
+		
+		if !replaced {
+			newLines = append(newLines, line)
+		}
+	}
+	
+	// Si aún no encontramos coincidencias, intentar búsqueda multi-línea
+	if replacements == 0 {
+		// Buscar coincidencias que crucen líneas
+		multilineMatch := findMultilineMatch(content, oldText)
+		if multilineMatch {
+			newContent := strings.ReplaceAll(content, oldText, newText)
+			return &EditResult{
+				ModifiedContent:  newContent,
+				ReplacementCount: 1,
+				MatchConfidence:  "medium",
+				LinesAffected:    strings.Count(oldText, "\n") + 1,
+			}, nil
+		}
+		
+		// Última opción: búsqueda con regex flexible
+		escapedOld := regexp.QuoteMeta(oldText)
+		// Permitir espacios flexibles y saltos de línea opcionales
+		flexiblePattern := makeFlexiblePattern(escapedOld)
+		
+		re, err := regexp.Compile(flexiblePattern)
+		if err == nil {
+			matches := re.FindAllString(content, -1)
+			if len(matches) > 0 {
+				newContent := re.ReplaceAllString(content, newText)
+				return &EditResult{
+					ModifiedContent:  newContent,
+					ReplacementCount: len(matches),
+					MatchConfidence:  "low",
+					LinesAffected:    countAffectedLines(content, matches),
+				}, nil
+			}
+		}
+	}
+
+	// Si encontramos reemplazos, devolver el resultado
+	if replacements > 0 {
+		return &EditResult{
+			ModifiedContent:  strings.Join(newLines, "\n"),
+			ReplacementCount: replacements,
+			MatchConfidence:  "medium",
+			LinesAffected:    linesAffected,
+		}, nil
+	}
+
+	// No se encontraron coincidencias - retornar con información de debug
 	return &EditResult{
-		ModifiedContent:  newContent,
-		ReplacementCount: count,
-		MatchConfidence:  "high",
-		LinesAffected:    count,
-	}, nil
+		ModifiedContent:  content,
+		ReplacementCount: 0,
+		MatchConfidence:  "none",
+		LinesAffected:    0,
+	}, fmt.Errorf("no matches found for text: %q", oldText)
+}
+
+// Funciones auxiliares para mejorar la búsqueda
+func normalizeLineEndings(s string) string {
+	// Convertir todos los saltos de línea a \n
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
+
+func normalizeWhitespace(s string) string {
+	// Reemplazar múltiples espacios/tabs con un solo espacio
+	re := regexp.MustCompile(`\s+`)
+	return re.ReplaceAllString(s, " ")
+}
+
+func getIndentation(line string) string {
+	// Obtener la indentación de una línea
+	trimmed := strings.TrimLeft(line, " \t")
+	return line[:len(line)-len(trimmed)]
+}
+
+func reconstructLine(original, oldText, newText string, normalizedPos int) string {
+	// Reconstruir línea manteniendo formato original
+	// Esta es una implementación simplificada
+	return strings.Replace(original, strings.TrimSpace(oldText), strings.TrimSpace(newText), 1)
+}
+
+func findMultilineMatch(content, pattern string) bool {
+	// Verificar si el patrón cruza múltiples líneas
+	return strings.Contains(pattern, "\n") && strings.Contains(content, pattern)
+}
+
+func makeFlexiblePattern(escaped string) string {
+	// Hacer el patrón más flexible con espacios y saltos de línea
+	pattern := strings.ReplaceAll(escaped, `\ `, `\s+`)
+	pattern = strings.ReplaceAll(pattern, `\n`, `\s*\n\s*`)
+	return pattern
+}
+
+func countAffectedLines(content string, matches []string) int {
+	// Contar líneas afectadas por los matches
+	lines := strings.Split(content, "\n")
+	affected := make(map[int]bool)
+	
+	for _, match := range matches {
+		idx := strings.Index(content, match)
+		if idx >= 0 {
+			lineNum := strings.Count(content[:idx], "\n")
+			matchLines := strings.Count(match, "\n") + 1
+			for i := 0; i < matchLines; i++ {
+				affected[lineNum+i] = true
+			}
+		}
+	}
+	
+	return len(affected)
 }
 
 // isFileTooLarge checks if a file is too large for single operations
