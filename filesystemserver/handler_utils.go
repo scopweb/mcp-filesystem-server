@@ -15,7 +15,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-
 // detectMimeType tries to determine the MIME type of a file
 func detectMimeType(path string) string {
 	mtype, err := mimetype.DetectFile(path)
@@ -151,11 +150,11 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 
 	// Contador inicial para verificar si hay coincidencias exactas
 	exactMatches := strings.Count(content, oldText)
-	
+
 	// Si hay coincidencias exactas, hacer reemplazo directo
 	if exactMatches > 0 {
 		newContent := strings.ReplaceAll(content, oldText, newText)
-		
+
 		// Calcular líneas afectadas
 		linesAffected := 0
 		lines := strings.Split(content, "\n")
@@ -178,15 +177,15 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 	newLines := make([]string, 0, len(lines))
 	replacements := 0
 	linesAffected := 0
-	
+
 	// Intentar con diferentes normalizaciones
 	normalizedOld := strings.TrimSpace(oldText)
-	
+
 	// Primero intentar línea por línea
-	for i, line := range lines {
+	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
 		replaced := false
-		
+
 		// 1. Búsqueda exacta de línea completa (ignorando espacios)
 		if trimmedLine == normalizedOld {
 			// Preservar indentación original
@@ -210,12 +209,12 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			linesAffected++
 			replaced = true
 		}
-		
+
 		if !replaced {
 			// 4. Intentar con normalización más agresiva
 			lineNormalized := normalizeWhitespace(line)
 			oldNormalized := normalizeWhitespace(oldText)
-			
+
 			if strings.Contains(lineNormalized, oldNormalized) {
 				// Encontrar la posición y reemplazar manteniendo formato original
 				idx := strings.Index(lineNormalized, oldNormalized)
@@ -229,12 +228,12 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 				}
 			}
 		}
-		
+
 		if !replaced {
 			newLines = append(newLines, line)
 		}
 	}
-	
+
 	// Si aún no encontramos coincidencias, intentar búsqueda multi-línea
 	if replacements == 0 {
 		// Buscar coincidencias que crucen líneas
@@ -248,12 +247,12 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 				LinesAffected:    strings.Count(oldText, "\n") + 1,
 			}, nil
 		}
-		
+
 		// Última opción: búsqueda con regex flexible
 		escapedOld := regexp.QuoteMeta(oldText)
 		// Permitir espacios flexibles y saltos de línea opcionales
 		flexiblePattern := makeFlexiblePattern(escapedOld)
-		
+
 		re, err := regexp.Compile(flexiblePattern)
 		if err == nil {
 			matches := re.FindAllString(content, -1)
@@ -327,21 +326,21 @@ func makeFlexiblePattern(escaped string) string {
 }
 
 func countAffectedLines(content string, matches []string) int {
-	// Contar líneas afectadas por los matches
-	lines := strings.Split(content, "\n")
 	affected := make(map[int]bool)
-	
+	totalLines := strings.Count(content, "\n") + 1
+
 	for _, match := range matches {
 		idx := strings.Index(content, match)
 		if idx >= 0 {
 			lineNum := strings.Count(content[:idx], "\n")
 			matchLines := strings.Count(match, "\n") + 1
-			for i := 0; i < matchLines; i++ {
+			// Asegurarse de no exceder el número de líneas del contenido
+			for i := 0; i < matchLines && (lineNum+i) < totalLines; i++ {
 				affected[lineNum+i] = true
 			}
 		}
 	}
-	
+
 	return len(affected)
 }
 
@@ -460,6 +459,11 @@ func (fs *FilesystemHandler) calculateCommentRatio(content, language string) flo
 	lines := strings.Split(content, "\n")
 	commentLines := 0
 
+	// Explicitly use 'lines' to avoid unused variable warning
+	if len(lines) == 0 {
+		return 0
+	}
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		switch language {
@@ -472,10 +476,6 @@ func (fs *FilesystemHandler) calculateCommentRatio(content, language string) flo
 				commentLines++
 			}
 		}
-	}
-
-	if len(lines) == 0 {
-		return 0
 	}
 
 	return float64(commentLines) / float64(len(lines)) * 100
