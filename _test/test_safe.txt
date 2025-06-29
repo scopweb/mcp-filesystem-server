@@ -1,0 +1,3 @@
+Este es un test de escritura segura.
+Línea 2 del contenido.
+Línea 3 con datos importantes.

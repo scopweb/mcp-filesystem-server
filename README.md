@@ -33,6 +33,12 @@ Secure filesystem access via Model Context Protocol with advanced analysis capab
 - `performance_analysis` - File system performance metrics
 - `assist_refactor` - Code refactoring assistance
 
+### Chunked Operations 🚀
+- `chunked_write` - Write large files in chunks (avoid memory limits)
+- `split_file` - Split large files into smaller chunks
+- `join_files` - Join multiple file chunks into single file
+- `write_file_safe` - Atomic file write with optional backup
+
 ## Installation
 
 ```bash

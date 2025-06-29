@@ -323,10 +323,68 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		),
 	), h.handleAssistRefactor)
 
-	// ARCHIVOS FRAGMENTADOS. PUNTO 6
-	// handleChunkedWrite  handleSplitFile  handleJoinFiles  handleWriteFileSafe
-	// MANEJADORES DE ARCHIVOS FRAGMENTADOS - IMPLEMENTACIÓN COMPLETA
-	// Para ser añadido al final de server.go
+	// ARCHIVOS FRAGMENTADOS - Chunked Operations
+	s.AddTool(mcp.NewTool(
+		"chunked_write",
+		mcp.WithDescription("Write large files in chunks to avoid memory limits."),
+		mcp.WithString("path",
+			mcp.Description("Path to write the file"),
+			mcp.Required(),
+		),
+		mcp.WithString("content",
+			mcp.Description("Content chunk to write"),
+			mcp.Required(),
+		),
+		mcp.WithNumber("chunk_index",
+			mcp.Description("Current chunk index (0-based)"),
+			mcp.Required(),
+		),
+		mcp.WithNumber("total_chunks",
+			mcp.Description("Total number of chunks"),
+			mcp.Required(),
+		),
+	), h.handleChunkedWrite)
+
+	s.AddTool(mcp.NewTool(
+		"split_file",
+		mcp.WithDescription("Split large file into smaller chunks."),
+		mcp.WithString("path",
+			mcp.Description("Path to file to split"),
+			mcp.Required(),
+		),
+		mcp.WithNumber("chunk_size",
+			mcp.Description("Size of each chunk in bytes (default: 1MB)"),
+		),
+	), h.handleSplitFile)
+
+	s.AddTool(mcp.NewTool(
+		"join_files",
+		mcp.WithDescription("Join multiple file chunks into single file."),
+		mcp.WithString("target_path",
+			mcp.Description("Path for the joined file"),
+			mcp.Required(),
+		),
+		mcp.WithArray("source_files",
+			mcp.Description("List of chunk files to join"),
+			mcp.Required(),
+		),
+	), h.handleJoinFiles)
+
+	s.AddTool(mcp.NewTool(
+		"write_file_safe",
+		mcp.WithDescription("Safe file write with atomic operation and optional backup."),
+		mcp.WithString("path",
+			mcp.Description("Path to write the file"),
+			mcp.Required(),
+		),
+		mcp.WithString("content",
+			mcp.Description("Content to write"),
+			mcp.Required(),
+		),
+		mcp.WithBoolean("create_backup",
+			mcp.Description("Create backup before writing (default: false)"),
+		),
+	), h.handleWriteFileSafe)
 
 	return s, nil
 }
