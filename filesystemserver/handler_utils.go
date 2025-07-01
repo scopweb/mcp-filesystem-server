@@ -138,100 +138,57 @@ func (fs *FilesystemHandler) analyzeContent(content, oldText string) interface{}
 
 // performIntelligentEdit performs intelligent text replacement
 func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText string, analysis interface{}) (*EditResult, error) {
-	// Si oldText está vacío, retornar error
 	if oldText == "" {
 		return nil, fmt.Errorf("old_text cannot be empty")
 	}
 
-	// Normalizar saltos de línea para compatibilidad Windows/Unix
+	// Normalización única
 	content = normalizeLineEndings(content)
 	oldText = normalizeLineEndings(oldText)
 	newText = normalizeLineEndings(newText)
 
-	// Contador inicial para verificar si hay coincidencias exactas
-	exactMatches := strings.Count(content, oldText)
-
-	// Si hay coincidencias exactas, hacer reemplazo directo
-	if exactMatches > 0 {
+	// Fast path: Check exact match primero (más común)
+	if idx := strings.Index(content, oldText); idx >= 0 {
 		newContent := strings.ReplaceAll(content, oldText, newText)
-
-		// Calcular líneas afectadas
-		linesAffected := 0
-		lines := strings.Split(content, "\n")
-		for _, line := range lines {
-			if strings.Contains(line, oldText) {
-				linesAffected++
-			}
-		}
-
+		replacements := strings.Count(content, oldText)
+		linesAffected := calculateLinesWithText(content, oldText)
+		
 		return &EditResult{
 			ModifiedContent:  newContent,
-			ReplacementCount: exactMatches,
+			ReplacementCount: replacements,
 			MatchConfidence:  "high",
 			LinesAffected:    linesAffected,
 		}, nil
 	}
 
-	// Si no hay coincidencias exactas, intentar búsqueda flexible
+	// Solo si no hay match exacto, hacer búsqueda flexible
 	lines := strings.Split(content, "\n")
-	newLines := make([]string, 0, len(lines))
+	newLines := make([]string, len(lines)) // Pre-allocate exact size
 	replacements := 0
-	linesAffected := 0
+	affectedLines := 0
 
-	// Intentar con diferentes normalizaciones
 	normalizedOld := strings.TrimSpace(oldText)
 
 	// Primero intentar línea por línea
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-		replaced := false
-
-		// 1. Búsqueda exacta de línea completa (ignorando espacios)
-		if trimmedLine == normalizedOld {
-			// Preservar indentación original
-			indent := getIndentation(line)
-			newLines = append(newLines, indent+strings.TrimSpace(newText))
-			replacements++
-			linesAffected++
-			replaced = true
-		} else if strings.Contains(line, oldText) {
-			// 2. Reemplazo parcial exacto dentro de la línea
-			newLine := strings.ReplaceAll(line, oldText, newText)
-			newLines = append(newLines, newLine)
+	for i, line := range lines {
+		newLine := line
+		
+		// Checks en orden de probabilidad
+		if strings.Contains(line, oldText) {
+			newLine = strings.ReplaceAll(line, oldText, newText)
 			replacements += strings.Count(line, oldText)
-			linesAffected++
-			replaced = true
+			affectedLines++
+		} else if trimmed := strings.TrimSpace(line); trimmed == normalizedOld {
+			newLine = getIndentation(line) + strings.TrimSpace(newText)
+			replacements++
+			affectedLines++
 		} else if strings.Contains(line, normalizedOld) {
-			// 3. Reemplazo con texto normalizado
-			newLine := strings.ReplaceAll(line, normalizedOld, newText)
-			newLines = append(newLines, newLine)
+			newLine = strings.ReplaceAll(line, normalizedOld, newText)
 			replacements += strings.Count(line, normalizedOld)
-			linesAffected++
-			replaced = true
+			affectedLines++
 		}
-
-		if !replaced {
-			// 4. Intentar con normalización más agresiva
-			lineNormalized := normalizeWhitespace(line)
-			oldNormalized := normalizeWhitespace(oldText)
-
-			if strings.Contains(lineNormalized, oldNormalized) {
-				// Encontrar la posición y reemplazar manteniendo formato original
-				idx := strings.Index(lineNormalized, oldNormalized)
-				if idx >= 0 {
-					// Reconstruir línea con el reemplazo
-					result := reconstructLine(line, oldText, newText, idx)
-					newLines = append(newLines, result)
-					replacements++
-					linesAffected++
-					replaced = true
-				}
-			}
-		}
-
-		if !replaced {
-			newLines = append(newLines, line)
-		}
+		
+		newLines[i] = newLine
 	}
 
 	// Si aún no encontramos coincidencias, intentar búsqueda multi-línea
@@ -274,7 +231,7 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			ModifiedContent:  strings.Join(newLines, "\n"),
 			ReplacementCount: replacements,
 			MatchConfidence:  "medium",
-			LinesAffected:    linesAffected,
+			LinesAffected:    affectedLines,
 		}, nil
 	}
 
@@ -663,4 +620,16 @@ func (fs *FilesystemHandler) handleMoveFile(ctx context.Context, request mcp.Cal
 			},
 		},
 	}, nil
+}
+
+// calculateLinesWithText calculates how many lines contain the specified text
+func calculateLinesWithText(content, text string) int {
+	lines := strings.Split(content, "\n")
+	count := 0
+	for _, line := range lines {
+		if strings.Contains(line, text) {
+			count++
+		}
+	}
+	return count
 }

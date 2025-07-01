@@ -323,6 +323,22 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		),
 	), h.handleAssistRefactor)
 
+	// Planificador de tareas
+	s.AddTool(mcp.NewTool(
+		"plan_task",
+		mcp.WithDescription("Create step-by-step execution plan for complex file operations."),
+		mcp.WithString("description",
+			mcp.Description("Task description"),
+			mcp.Required(),
+		),
+		mcp.WithArray("target_files",
+			mcp.Description("Files to modify"),
+		),
+		mcp.WithString("workspace",
+			mcp.Description("Workspace path"),
+		),
+	), h.handlePlanTask)
+
 	// ARCHIVOS FRAGMENTADOS - Chunked Operations
 	s.AddTool(mcp.NewTool(
 		"chunked_write",

@@ -32,6 +32,7 @@ Secure filesystem access via Model Context Protocol with advanced analysis capab
 - `generate_report` - Create project reports in JSON/HTML/Markdown
 - `performance_analysis` - File system performance metrics
 - `assist_refactor` - Code refactoring assistance
+- `plan_task` - Create step-by-step execution plans for complex operations 🆕
 
 ### Chunked Operations 🚀
 - `chunked_write` - Write large files in chunks (avoid memory limits)
