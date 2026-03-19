@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -33,6 +34,7 @@ func NewFilesystemHandler(allowedDirs []string) (*FilesystemHandler, error) {
 	}
 	return &FilesystemHandler{
 		allowedDirs: normalized,
+		limiter:     newRateLimiter(60, time.Minute),
 	}, nil
 }
 

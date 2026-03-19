@@ -35,6 +35,7 @@ type FileNode struct {
 // FilesystemHandler manages file system operations
 type FilesystemHandler struct {
 	allowedDirs []string
+	limiter     *rateLimiter
 }
 
 // FileDiff represents the result of file comparison

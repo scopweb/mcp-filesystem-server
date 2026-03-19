@@ -100,12 +100,31 @@ func (fs *FilesystemHandler) detectLanguage(content string) string {
 	return "unknown"
 }
 
-// convertToString converts interface{} to string
+// convertToString converts interface{} to string with broad type support.
+// Handles float64, bool, int, json.Number — types that LLMs send unexpectedly.
 func convertToString(v interface{}) (string, bool) {
-	if str, ok := v.(string); ok {
-		return str, true
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case float64:
+		if val == float64(int64(val)) {
+			return fmt.Sprintf("%d", int64(val)), true
+		}
+		return fmt.Sprintf("%g", val), true
+	case bool:
+		if val {
+			return "true", true
+		}
+		return "false", true
+	case int:
+		return fmt.Sprintf("%d", val), true
+	case int64:
+		return fmt.Sprintf("%d", val), true
+	case nil:
+		return "", false
+	default:
+		return fmt.Sprintf("%v", val), true
 	}
-	return "", false
 }
 
 // validateEditableFile checks if a file can be edited
@@ -159,6 +178,43 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			MatchConfidence:  "high",
 			LinesAffected:    linesAffected,
 		}, nil
+	}
+
+	// ── Phase 2: already-present detection (idempotent — ported from ultra) ──
+	// If old_text is absent but new_text is already in the file → skip gracefully.
+	fixedOld := FixLiteralEscapes(oldText)
+	fixedNew := FixLiteralEscapes(newText)
+
+	oldAbsent := !strings.Contains(content, oldText) && !strings.Contains(content, fixedOld)
+	newPresent := newText != "" && (strings.Contains(content, newText) || strings.Contains(content, fixedNew))
+
+	if newPresent && oldAbsent {
+		return &EditResult{
+			ModifiedContent:  content,
+			ReplacementCount: 0,
+			MatchConfidence:  "already_present",
+			LinesAffected:    0,
+		}, nil
+	}
+
+	// ── Phase 3: literal-escape recovery (ported from ultra) ──
+	// Claude Desktop sometimes sends literal \n (two chars) instead of real newlines.
+	if fixedOld != oldText {
+		countFixed := strings.Count(content, fixedOld)
+		if countFixed > 0 {
+			replacement := fixedNew
+			if replacement == "" {
+				replacement = newText
+			}
+			newContent := strings.ReplaceAll(content, fixedOld, replacement)
+			linesAffected := strings.Count(fixedOld, "\n") + 1
+			return &EditResult{
+				ModifiedContent:  newContent,
+				ReplacementCount: countFixed,
+				MatchConfidence:  "high_after_escape_fix",
+				LinesAffected:    linesAffected,
+			}, nil
+		}
 	}
 
 	// Solo si no hay match exacto, hacer búsqueda flexible
@@ -235,13 +291,13 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 		}, nil
 	}
 
-	// No se encontraron coincidencias - retornar con información de debug
+	// No match — return 0 replacements without error (non-blocking like ultra)
 	return &EditResult{
 		ModifiedContent:  content,
 		ReplacementCount: 0,
 		MatchConfidence:  "none",
 		LinesAffected:    0,
-	}, fmt.Errorf("no matches found for text: %q", oldText)
+	}, nil
 }
 
 // Funciones auxiliares para mejorar la búsqueda

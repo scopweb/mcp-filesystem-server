@@ -5,7 +5,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.4.1"
+var Version = "0.5.0"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
@@ -27,7 +27,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithResourceDescription("Access to files and directories on the local file system"),
 	), h.handleReadResource)
 
-	// Register tool handlers
+	// Register tool handlers — each wrapped with withNormalize for parameter
+	// aliasing, type coercion, and JSON flexibility (ported from ultra).
 	s.AddTool(mcp.NewTool(
 		"read_file",
 		mcp.WithDescription("Read the complete contents of a file from the file system."),
@@ -35,7 +36,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Path to the file to read"),
 			mcp.Required(),
 		),
-	), h.handleReadFile)
+	), h.withNormalize("read_file", h.handleReadFile))
 
 	s.AddTool(mcp.NewTool(
 		"write_file",
@@ -48,7 +49,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Content to write to the file"),
 			mcp.Required(),
 		),
-	), h.handleWriteFile)
+	), h.withNormalize("write_file", h.handleWriteFile))
 
 	s.AddTool(mcp.NewTool(
 		"list_directory",
@@ -57,7 +58,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Path of the directory to list"),
 			mcp.Required(),
 		),
-	), h.handleListDirectory)
+	), h.withNormalize("list_directory", h.handleListDirectory))
 
 	s.AddTool(mcp.NewTool(
 		"create_directory",
@@ -66,7 +67,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Path of the directory to create"),
 			mcp.Required(),
 		),
-	), h.handleCreateDirectory)
+	), h.withNormalize("create_directory", h.handleCreateDirectory))
 
 	s.AddTool(mcp.NewTool(
 		"copy_file",
@@ -79,7 +80,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Destination path"),
 			mcp.Required(),
 		),
-	), h.handleCopyFile)
+	), h.withNormalize("copy_file", h.handleCopyFile))
 
 	s.AddTool(mcp.NewTool(
 		"move_file",
@@ -92,7 +93,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Destination path"),
 			mcp.Required(),
 		),
-	), h.handleMoveFile)
+	), h.withNormalize("move_file", h.handleMoveFile))
 
 	s.AddTool(mcp.NewTool(
 		"search_files",
@@ -105,7 +106,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Search pattern to match against file names"),
 			mcp.Required(),
 		),
-	), h.handleSearchFiles)
+	), h.withNormalize("search_files", h.handleSearchFiles))
 
 	s.AddTool(mcp.NewTool(
 		"get_file_info",
@@ -114,7 +115,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Path to the file or directory"),
 			mcp.Required(),
 		),
-	), h.handleGetFileInfo)
+	), h.withNormalize("get_file_info", h.handleGetFileInfo))
 
 	s.AddTool(mcp.NewTool(
 		"list_allowed_directories",
@@ -128,7 +129,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("List of file paths to read"),
 			mcp.Required(),
 		),
-	), h.handleReadMultipleFiles)
+	), h.withNormalize("read_multiple_files", h.handleReadMultipleFiles))
 
 	s.AddTool(mcp.NewTool(
 		"tree",
@@ -143,7 +144,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithBoolean("follow_symlinks",
 			mcp.Description("Whether to follow symbolic links (default: false)"),
 		),
-	), h.handleTree)
+	), h.withNormalize("tree", h.handleTree))
 
 	s.AddTool(mcp.NewTool(
 		"delete_file",
@@ -155,7 +156,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithBoolean("recursive",
 			mcp.Description("Whether to recursively delete directories (default: false)"),
 		),
-	), h.handleDeleteFile)
+	), h.withNormalize("delete_file", h.handleDeleteFile))
 
 	s.AddTool(mcp.NewTool(
 		"edit_file",
@@ -172,9 +173,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("New text to replace with"),
 			mcp.Required(),
 		),
-	), h.handleEditFile)
+	), h.withNormalize("edit_file", h.handleEditFile))
 
-	// Herramienta de análisis profundo de archivos
 	s.AddTool(mcp.NewTool(
 		"analyze_file",
 		mcp.WithDescription("Perform deep analysis of a file including complexity metrics, dependencies, and metadata optimized for Claude Desktop."),
@@ -182,9 +182,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Path to the file to analyze"),
 			mcp.Required(),
 		),
-	), h.handleAnalyzeFile)
+	), h.withNormalize("analyze_file", h.handleAnalyzeFile))
 
-	// Búsqueda inteligente optimizada para Claude
 	s.AddTool(mcp.NewTool(
 		"smart_search",
 		mcp.WithDescription("Intelligent search with regex support, content matching, and file type filtering - perfect for Claude's code analysis."),
@@ -202,9 +201,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithArray("file_types",
 			mcp.Description("Filter by file extensions (e.g., ['.js', '.py', '.go'])"),
 		),
-	), h.handleSmartSearch)
+	), h.withNormalize("smart_search", h.handleSmartSearch))
 
-	// Detección de archivos duplicados
 	s.AddTool(mcp.NewTool(
 		"find_duplicates",
 		mcp.WithDescription("Find duplicate files by content hash - useful for cleanup and optimization tasks Claude might suggest."),
@@ -212,9 +210,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Directory to scan for duplicates"),
 			mcp.Required(),
 		),
-	), h.handleFindDuplicates)
+	), h.withNormalize("find_duplicates", h.handleFindDuplicates))
 
-	// Análisis de estructura de proyecto
 	s.AddTool(mcp.NewTool(
 		"analyze_project",
 		mcp.WithDescription("Comprehensive project structure analysis with language detection and metrics - gives Claude full project context."),
@@ -222,9 +219,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Project root directory"),
 			mcp.Required(),
 		),
-	), h.handleAnalyzeProject)
+	), h.withNormalize("analyze_project", h.handleAnalyzeProject))
 
-	// Operaciones en lote
 	s.AddTool(mcp.NewTool(
 		"batch_operations",
 		mcp.WithDescription("Execute multiple file operations in a single call - efficient for Claude's bulk suggestions."),
@@ -232,9 +228,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Array of operations to execute: [{type: 'rename|delete|copy', from: 'path', to: 'path'}]"),
 			mcp.Required(),
 		),
-	), h.handleBatchEdit)
+	), h.withNormalize("batch_operations", h.handleBatchEdit))
 
-	// Comparación de archivos avanzada
 	s.AddTool(mcp.NewTool(
 		"compare_files",
 		mcp.WithDescription("Advanced file comparison with diff generation and similarity analysis for Claude's code review tasks."),
@@ -249,9 +244,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithString("format",
 			mcp.Description("Output format: 'unified', 'context', 'side-by-side' (default: unified)"),
 		),
-	), h.handleCompareFiles)
+	), h.withNormalize("compare_files", h.handleCompareFiles))
 
-	// Análisis de rendimiento de archivos
 	s.AddTool(mcp.NewTool(
 		"performance_analysis",
 		mcp.WithDescription("Analyze file system performance metrics and identify bottlenecks."),
@@ -262,9 +256,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithString("operation",
 			mcp.Description("Operation to benchmark: 'read', 'write', 'list' (default: all)"),
 		),
-	), h.handlePerformanceAnalysis)
+	), h.withNormalize("performance_analysis", h.handlePerformanceAnalysis))
 
-	// Generador de reportes
 	s.AddTool(mcp.NewTool(
 		"generate_report",
 		mcp.WithDescription("Generate comprehensive reports in various formats (JSON, HTML, Markdown) for Claude's analysis."),
@@ -281,9 +274,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithArray("sections",
 			mcp.Description("Report sections to include: ['overview', 'files', 'quality', 'dependencies', 'security']"),
 		),
-	), h.handleGenerateReport)
+	), h.withNormalize("generate_report", h.handleGenerateReport))
 
-	// Sincronización inteligente
 	s.AddTool(mcp.NewTool(
 		"smart_sync",
 		mcp.WithDescription("Intelligent file synchronization with conflict detection and resolution suggestions."),
@@ -301,9 +293,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithArray("exclude_patterns",
 			mcp.Description("Patterns to exclude from sync"),
 		),
-	), h.handleSmartSync)
+	), h.withNormalize("smart_sync", h.handleSmartSync))
 
-	// Herramienta de refactoring asistido
 	s.AddTool(mcp.NewTool(
 		"assist_refactor",
 		mcp.WithDescription("Assist with code refactoring by analyzing dependencies and suggesting safe changes."),
@@ -321,9 +312,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithObject("options",
 			mcp.Description("Refactoring options"),
 		),
-	), h.handleAssistRefactor)
+	), h.withNormalize("assist_refactor", h.handleAssistRefactor))
 
-	// Planificador de tareas
 	s.AddTool(mcp.NewTool(
 		"plan_task",
 		mcp.WithDescription("Create step-by-step execution plan for complex file operations."),
@@ -337,7 +327,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithString("workspace",
 			mcp.Description("Workspace path"),
 		),
-	), h.handlePlanTask)
+	), h.withNormalize("plan_task", h.handlePlanTask))
 
 	// ARCHIVOS FRAGMENTADOS - Chunked Operations
 	s.AddTool(mcp.NewTool(
@@ -359,7 +349,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Total number of chunks"),
 			mcp.Required(),
 		),
-	), h.handleChunkedWrite)
+	), h.withNormalize("chunked_write", h.handleChunkedWrite))
 
 	s.AddTool(mcp.NewTool(
 		"split_file",
@@ -371,7 +361,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithNumber("chunk_size",
 			mcp.Description("Size of each chunk in bytes (default: 1MB)"),
 		),
-	), h.handleSplitFile)
+	), h.withNormalize("split_file", h.handleSplitFile))
 
 	s.AddTool(mcp.NewTool(
 		"join_files",
@@ -384,7 +374,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("List of chunk files to join"),
 			mcp.Required(),
 		),
-	), h.handleJoinFiles)
+	), h.withNormalize("join_files", h.handleJoinFiles))
 
 	s.AddTool(mcp.NewTool(
 		"write_file_safe",
@@ -400,7 +390,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		mcp.WithBoolean("create_backup",
 			mcp.Description("Create backup before writing (default: false)"),
 		),
-	), h.handleWriteFileSafe)
+	), h.withNormalize("write_file_safe", h.handleWriteFileSafe))
 
 	return s, nil
 }

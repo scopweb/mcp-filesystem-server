@@ -76,38 +76,52 @@ func (fs *FilesystemHandler) handleBatchEdit(ctx context.Context, request mcp.Ca
 	}, nil
 }
 
-// processBatchOperation - Procesa una operación individual del lote
+// resolveStringField resolves a field value from multiple possible aliases.
+// Returns the first non-empty string found, or ("", false) if none match.
+func resolveStringField(op map[string]interface{}, keys ...string) (string, bool) {
+	for _, k := range keys {
+		if v, ok := op[k].(string); ok && v != "" {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// processBatchOperation - Procesa una operación individual del lote.
+// Accepts "action" as alias for "type" (ported from ultra — Claude Desktop convention).
 func (fs *FilesystemHandler) processBatchOperation(operation map[string]interface{}, opNum int) (string, error) {
-	opType, ok := operation["type"].(string)
+	// Accept "type" or "action" for the operation type
+	opType, ok := resolveStringField(operation, "type", "action")
 	if !ok {
-		return "", fmt.Errorf("missing or invalid 'type' field")
+		return "", fmt.Errorf("missing 'type' (or 'action') field")
 	}
 
-	switch strings.ToLower(opType) {
+	switch strings.ToLower(strings.TrimSpace(opType)) {
 	case "rename", "move":
 		return fs.processBatchMove(operation, opNum)
-	case "copy":
+	case "copy", "cp":
 		return fs.processBatchCopy(operation, opNum)
-	case "delete":
+	case "delete", "remove", "rm":
 		return fs.processBatchDelete(operation, opNum)
 	case "create_dir", "mkdir":
 		return fs.processBatchCreateDir(operation, opNum)
 	case "write":
 		return fs.processBatchWrite(operation, opNum)
 	default:
-		return "", fmt.Errorf("unsupported operation type: %s", opType)
+		return "", fmt.Errorf("unsupported operation type: '%s' (supported: rename, move, copy, cp, delete, remove, rm, create_dir, mkdir, write)", opType)
 	}
 }
 
 // processBatchMove - Procesa operación de mover/renombrar
+// Accepts: from/source/src/path for origin; to/destination/dest/dst/target for target
 func (fs *FilesystemHandler) processBatchMove(operation map[string]interface{}, opNum int) (string, error) {
-	from, ok := operation["from"].(string)
+	from, ok := resolveStringField(operation, "from", "source", "src", "path", "file")
 	if !ok {
-		return "", fmt.Errorf("missing 'from' field")
+		return "", fmt.Errorf("missing 'from' (or 'source') field")
 	}
-	to, ok := operation["to"].(string)
+	to, ok := resolveStringField(operation, "to", "destination", "dest", "dst", "target")
 	if !ok {
-		return "", fmt.Errorf("missing 'to' field")
+		return "", fmt.Errorf("missing 'to' (or 'destination') field")
 	}
 
 	validFrom, err := fs.validatePath(from)
@@ -134,14 +148,15 @@ func (fs *FilesystemHandler) processBatchMove(operation map[string]interface{}, 
 }
 
 // processBatchCopy - Procesa operación de copiar
+// Accepts: from/source/src for origin; to/destination/dest/dst/target for target
 func (fs *FilesystemHandler) processBatchCopy(operation map[string]interface{}, opNum int) (string, error) {
-	from, ok := operation["from"].(string)
+	from, ok := resolveStringField(operation, "from", "source", "src", "path", "file")
 	if !ok {
-		return "", fmt.Errorf("missing 'from' field")
+		return "", fmt.Errorf("missing 'from' (or 'source') field")
 	}
-	to, ok := operation["to"].(string)
+	to, ok := resolveStringField(operation, "to", "destination", "dest", "dst", "target")
 	if !ok {
-		return "", fmt.Errorf("missing 'to' field")
+		return "", fmt.Errorf("missing 'to' (or 'destination') field")
 	}
 
 	validFrom, err := fs.validatePath(from)
@@ -168,10 +183,11 @@ func (fs *FilesystemHandler) processBatchCopy(operation map[string]interface{}, 
 }
 
 // processBatchDelete - Procesa operación de eliminar
+// Accepts: path/from/source/src/file for the target path
 func (fs *FilesystemHandler) processBatchDelete(operation map[string]interface{}, opNum int) (string, error) {
-	path, ok := operation["path"].(string)
+	path, ok := resolveStringField(operation, "path", "from", "source", "src", "file")
 	if !ok {
-		return "", fmt.Errorf("missing 'path' field")
+		return "", fmt.Errorf("missing 'path' (or 'from' or 'source') field")
 	}
 
 	validPath, err := fs.validatePath(path)
@@ -205,8 +221,9 @@ func (fs *FilesystemHandler) processBatchDelete(operation map[string]interface{}
 }
 
 // processBatchCreateDir - Procesa operación de crear directorio
+// Accepts: path/from/target/destination for the directory path
 func (fs *FilesystemHandler) processBatchCreateDir(operation map[string]interface{}, opNum int) (string, error) {
-	path, ok := operation["path"].(string)
+	path, ok := resolveStringField(operation, "path", "from", "target", "destination")
 	if !ok {
 		return "", fmt.Errorf("missing 'path' field")
 	}

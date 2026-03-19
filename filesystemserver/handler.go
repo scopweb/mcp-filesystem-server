@@ -69,6 +69,39 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		return nil, fmt.Errorf(err.Error())
 	}
 
+	// Already-present: no write needed, return success with hint (ported from ultra)
+	if result.MatchConfidence == "already_present" {
+		if backupPath != "" {
+			os.Remove(backupPath)
+			backupPath = ""
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{
+					Type: "text",
+					Text: fmt.Sprintf("✅ Edit already applied — %s is up to date (new_text already present, old_text absent)", path),
+				},
+			},
+		}, nil
+	}
+
+	// No match: don't write, return 0 replacements (non-blocking like ultra)
+	if result.ReplacementCount == 0 {
+		if backupPath != "" {
+			os.Remove(backupPath)
+			backupPath = ""
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{
+					Type: "text",
+					Text: fmt.Sprintf("📝 Changes: %d replacement(s) — old_text not found in %s. Re-read the file to get current content.",
+						result.ReplacementCount, path),
+				},
+			},
+		}, nil
+	}
+
 	if err := os.WriteFile(validPath, []byte(result.ModifiedContent), 0644); err != nil {
 		return nil, fmt.Errorf("error writing file: %v", err)
 	}
