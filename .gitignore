@@ -1,24 +1,51 @@
-.aider*
-.opencode*
-OpenCode.md
 # Executables
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 mcp-filesystem-server
 mcp-filesystem-server-enhanced
 
-# Scripts de configuración local
+# Go build
+dist/
+build/
+vendor/
+
+# Testing
+test-build.exe
+coverage.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Agent/AI tooling
+.agent/
+.agents/
+.aider*
+.opencode*
+OpenCode.md
+
+# Local scripts
 fix-git-remotes.*
 verify-status.*
 
-# Archivos temporales  
+# Temp docs
 FIXES_NEEDED.md
 FORK-GUIDE.md
 PROYECTO_COMPLETADO.md
 RESUMEN_CAMBIOS_TESTS.md
+MANUAL_GITHUB.md
 
-# Go builds
-dist/
-build/
-
-# Testing
-test-build.exe
+# Environment
+.env
+.env.local
