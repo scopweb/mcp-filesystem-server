@@ -7,8 +7,13 @@ description: Comparison between MCP Filesystem Server and the full-featured ultr
 
 | Feature | This server | [Ultra](https://github.com/scopweb/mcp-filesystem-go-ultra) |
 |---------|------------|------|
-| Tools | 27 | 16 (consolidated) |
+| Tools | 29 | 16 (consolidated) |
 | Normalizer | Yes (ported) | Yes (original) |
+| MCP Roots | Yes | Partial |
+| Tool Annotations | Yes (all tools) | Partial |
+| Media file reading | Yes (`read_media_file`) | No |
+| Atomic writes | Yes (all write ops) | Yes |
+| `edit_file` dry run | Yes | No |
 | Backup/restore | No | Yes |
 | Pipeline executor | No | Yes |
 | Audit trail | No | Yes |

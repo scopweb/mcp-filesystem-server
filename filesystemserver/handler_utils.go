@@ -556,11 +556,11 @@ func (fs *FilesystemHandler) calculateComplexity(content, language string) int {
 
 // handleCopyFile handles file copy operations
 func (fs *FilesystemHandler) handleCopyFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	source, ok := request.Params.Arguments["source"].(string)
+	source, ok := request.GetArguments()["source"].(string)
 	if !ok {
 		return nil, fmt.Errorf("source must be a string")
 	}
-	destination, ok := request.Params.Arguments["destination"].(string)
+	destination, ok := request.GetArguments()["destination"].(string)
 	if !ok {
 		return nil, fmt.Errorf("destination must be a string")
 	}
@@ -613,11 +613,11 @@ func (fs *FilesystemHandler) handleCopyFile(ctx context.Context, request mcp.Cal
 
 // handleMoveFile handles file move operations
 func (fs *FilesystemHandler) handleMoveFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	source, ok := request.Params.Arguments["source"].(string)
+	source, ok := request.GetArguments()["source"].(string)
 	if !ok {
 		return nil, fmt.Errorf("source must be a string")
 	}
-	destination, ok := request.Params.Arguments["destination"].(string)
+	destination, ok := request.GetArguments()["destination"].(string)
 	if !ok {
 		return nil, fmt.Errorf("destination must be a string")
 	}
@@ -676,6 +676,42 @@ func (fs *FilesystemHandler) handleMoveFile(ctx context.Context, request mcp.Cal
 			},
 		},
 	}, nil
+}
+
+// buildUnifiedDiff produces a simple unified-diff preview between two strings.
+func buildUnifiedDiff(original, modified, filename string) string {
+	oldLines := strings.Split(original, "\n")
+	newLines := strings.Split(modified, "\n")
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("--- %s (original)\n", filename))
+	sb.WriteString(fmt.Sprintf("+++ %s (modified)\n", filename))
+
+	// Simple line-by-line diff
+	maxLen := len(oldLines)
+	if len(newLines) > maxLen {
+		maxLen = len(newLines)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var oldLine, newLine string
+		if i < len(oldLines) {
+			oldLine = oldLines[i]
+		}
+		if i < len(newLines) {
+			newLine = newLines[i]
+		}
+		if oldLine != newLine {
+			if i < len(oldLines) {
+				sb.WriteString(fmt.Sprintf("-%s\n", oldLine))
+			}
+			if i < len(newLines) {
+				sb.WriteString(fmt.Sprintf("+%s\n", newLine))
+			}
+		}
+	}
+
+	return sb.String()
 }
 
 // calculateLinesWithText calculates how many lines contain the specified text

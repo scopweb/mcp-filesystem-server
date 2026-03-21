@@ -17,7 +17,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	requiredParams := []string{"path", "old_text", "new_text"}
 
 	for _, param := range requiredParams {
-		if value, exists := request.Params.Arguments[param]; exists {
+		if value, exists := request.GetArguments()[param]; exists {
 			switch v := value.(type) {
 			case string:
 				params[param] = v
@@ -97,6 +97,31 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 					Type: "text",
 					Text: fmt.Sprintf("📝 Changes: %d replacement(s) — old_text not found in %s. Re-read the file to get current content.",
 						result.ReplacementCount, path),
+				},
+			},
+		}, nil
+	}
+
+	// dry_run: preview diff without writing
+	dryRun := false
+	if v, ok := request.GetArguments()["dry_run"]; ok {
+		if b, ok := v.(bool); ok {
+			dryRun = b
+		}
+	}
+
+	if dryRun {
+		if backupPath != "" {
+			os.Remove(backupPath)
+			backupPath = ""
+		}
+		diff := buildUnifiedDiff(string(content), result.ModifiedContent, path)
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{
+					Type: "text",
+					Text: fmt.Sprintf("🔍 Dry run — no changes written\n📊 Would make: %d replacement(s)\n🎯 Match confidence: %s\n\n%s",
+						result.ReplacementCount, result.MatchConfidence, diff),
 				},
 			},
 		}, nil

@@ -35,9 +35,9 @@ type TaskStep struct {
 
 // handlePlanTask creates step-by-step execution plan for complex operations
 func (fs *FilesystemHandler) handlePlanTask(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	description, _ := request.Params.Arguments["description"].(string)
-	workspace, _ := request.Params.Arguments["workspace"].(string)
-	targetFilesParam, _ := request.Params.Arguments["target_files"].([]interface{})
+	description, _ := request.GetArguments()["description"].(string)
+	workspace, _ := request.GetArguments()["workspace"].(string)
+	targetFilesParam, _ := request.GetArguments()["target_files"].([]interface{})
 
 	if description == "" {
 		return &mcp.CallToolResult{

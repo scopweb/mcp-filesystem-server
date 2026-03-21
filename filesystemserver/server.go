@@ -1,11 +1,14 @@
 package filesystemserver
 
 import (
+	"context"
+	"strings"
+
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.5.0"
+var Version = "0.6.0"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
@@ -18,7 +21,22 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		"secure-filesystem-server",
 		Version,
 		server.WithResourceCapabilities(true, true),
+		server.WithRoots(),
 	)
+
+	// Wire roots handler so the handler can request allowed dirs from the client.
+	h.requestRootsFn = func(ctx context.Context) ([]string, error) {
+		result, err := s.RequestRoots(ctx, mcp.ListRootsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		dirs := make([]string, 0, len(result.Roots))
+		for _, root := range result.Roots {
+			path := strings.TrimPrefix(root.URI, "file://")
+			dirs = append(dirs, path)
+		}
+		return dirs, nil
+	}
 
 	// Register resource handlers
 	s.AddResource(mcp.NewResource(

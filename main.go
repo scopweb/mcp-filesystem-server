@@ -10,18 +10,16 @@ import (
 )
 
 func main() {
-	// Parse command line arguments
-	if len(os.Args) < 2 {
-		fmt.Fprintf(
-			os.Stderr,
-			"Usage: %s <allowed-directory> [additional-directories...]\n",
-			os.Args[0],
-		)
-		os.Exit(1)
+	// Parse command line arguments.
+	// Directories can also be provided dynamically via MCP Roots (roots/list).
+	allowedDirs := os.Args[1:]
+	if len(allowedDirs) == 0 {
+		fmt.Fprintf(os.Stderr,
+			"Info: no allowed directories specified; expecting MCP client to provide roots via roots/list.\n")
 	}
 
 	// Create and start the server
-	fss, err := filesystemserver.NewFilesystemServer(os.Args[1:])
+	fss, err := filesystemserver.NewFilesystemServer(allowedDirs)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}

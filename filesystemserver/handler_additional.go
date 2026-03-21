@@ -13,11 +13,11 @@ import (
 
 // handleSearchFiles searches for files matching a pattern
 func (fs *FilesystemHandler) handleSearchFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
-	pattern, ok := request.Params.Arguments["pattern"].(string)
+	pattern, ok := request.GetArguments()["pattern"].(string)
 	if !ok {
 		return nil, fmt.Errorf("pattern must be a string")
 	}
@@ -108,7 +108,7 @@ func (fs *FilesystemHandler) handleSearchFiles(ctx context.Context, request mcp.
 
 // handleTree generates a tree view of directory structure
 func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -127,14 +127,14 @@ func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToo
 	}
 
 	depth := 3
-	if depthParam, ok := request.Params.Arguments["depth"]; ok {
+	if depthParam, ok := request.GetArguments()["depth"]; ok {
 		if d, ok := depthParam.(float64); ok {
 			depth = int(d)
 		}
 	}
 
 	followSymlinks := false
-	if followParam, ok := request.Params.Arguments["follow_symlinks"]; ok {
+	if followParam, ok := request.GetArguments()["follow_symlinks"]; ok {
 		if f, ok := followParam.(bool); ok {
 			followSymlinks = f
 		}
@@ -207,7 +207,7 @@ func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToo
 
 // handleGetFileInfo gets detailed file information
 func (fs *FilesystemHandler) handleGetFileInfo(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -291,7 +291,7 @@ func (fs *FilesystemHandler) handleGetFileInfo(ctx context.Context, request mcp.
 
 // handleReadMultipleFiles reads multiple files at once
 func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	pathsParam, ok := request.Params.Arguments["paths"]
+	pathsParam, ok := request.GetArguments()["paths"]
 	if !ok {
 		return nil, fmt.Errorf("paths parameter is required")
 	}
@@ -434,7 +434,8 @@ func (fs *FilesystemHandler) handleListAllowedDirectories(ctx context.Context, r
 // Helper functions
 func (fs *FilesystemHandler) searchFiles(rootPath, pattern string) ([]string, error) {
 	var results []string
-	pattern = strings.ToLower(pattern)
+	lowerPattern := strings.ToLower(pattern)
+	isGlob := strings.ContainsAny(pattern, "*?[")
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -445,7 +446,14 @@ func (fs *FilesystemHandler) searchFiles(rootPath, pattern string) ([]string, er
 			return nil
 		}
 
-		if strings.Contains(strings.ToLower(info.Name()), pattern) {
+		name := info.Name()
+		var matched bool
+		if isGlob {
+			matched, _ = filepath.Match(lowerPattern, strings.ToLower(name))
+		} else {
+			matched = strings.Contains(strings.ToLower(name), lowerPattern)
+		}
+		if matched {
 			results = append(results, path)
 		}
 		return nil

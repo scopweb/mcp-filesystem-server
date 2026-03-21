@@ -13,6 +13,58 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// UpdateAllowedDirs replaces the allowed directory list (thread-safe).
+func (fs *FilesystemHandler) UpdateAllowedDirs(dirs []string) {
+	normalized := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		normalized = append(normalized, filepath.Clean(abs)+string(filepath.Separator))
+	}
+	fs.mu.Lock()
+	fs.allowedDirs = normalized
+	fs.mu.Unlock()
+}
+
+// tryFetchRoots asks the client for its roots and merges them into allowedDirs.
+// It only runs once per handler lifetime; subsequent calls are no-ops.
+func (fs *FilesystemHandler) tryFetchRoots(ctx context.Context) {
+	if fs.requestRootsFn == nil {
+		return
+	}
+	fs.mu.Lock()
+	if fs.rootsFetched {
+		fs.mu.Unlock()
+		return
+	}
+	fs.rootsFetched = true
+	fs.mu.Unlock()
+
+	dirs, err := fs.requestRootsFn(ctx)
+	if err != nil || len(dirs) == 0 {
+		return
+	}
+
+	normalized := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		normalized = append(normalized, filepath.Clean(abs)+string(filepath.Separator))
+	}
+
+	fs.mu.Lock()
+	if len(fs.allowedDirs) == 0 {
+		fs.allowedDirs = normalized
+	} else {
+		fs.allowedDirs = append(fs.allowedDirs, normalized...)
+	}
+	fs.mu.Unlock()
+}
+
 // NewFilesystemHandler creates a new filesystem handler
 func NewFilesystemHandler(allowedDirs []string) (*FilesystemHandler, error) {
 	normalized := make([]string, 0, len(allowedDirs))
@@ -88,7 +140,11 @@ func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 		}
 	}
 
-	for _, dir := range fs.allowedDirs {
+	fs.mu.RLock()
+	dirs := fs.allowedDirs
+	fs.mu.RUnlock()
+
+	for _, dir := range dirs {
 		if strings.HasPrefix(absPath, dir) {
 			return true
 		}
@@ -98,7 +154,7 @@ func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 
 // handleReadFile reads file contents
 func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -220,11 +276,11 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 
 // handleWriteFile writes content to a file
 func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
-	content, ok := request.Params.Arguments["content"].(string)
+	content, ok := request.GetArguments()["content"].(string)
 	if !ok {
 		return nil, fmt.Errorf("content must be a string")
 	}
@@ -271,7 +327,34 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		}, nil
 	}
 
-	if err := os.WriteFile(validPath, []byte(content), 0644); err != nil {
+	// Atomic write: write to temp file in same dir, then rename
+	tmpFile, err := os.CreateTemp(parentDir, ".mcp-write-*.tmp")
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error creating temp file: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+	tmpPath := tmpFile.Name()
+	_, writeErr := tmpFile.WriteString(content)
+	closeErr := tmpFile.Close()
+	if writeErr != nil || closeErr != nil {
+		os.Remove(tmpPath)
+		errMsg := writeErr
+		if errMsg == nil {
+			errMsg = closeErr
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error writing temp file: %v", errMsg)},
+			},
+			IsError: true,
+		}, nil
+	}
+	if err := os.Rename(tmpPath, validPath); err != nil {
+		os.Remove(tmpPath)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error writing file: %v", err)},
@@ -307,7 +390,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 
 // handleListDirectory lists directory contents
 func (fs *FilesystemHandler) handleListDirectory(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -401,7 +484,7 @@ func (fs *FilesystemHandler) handleListDirectory(ctx context.Context, request mc
 
 // handleCreateDirectory creates a new directory
 func (fs *FilesystemHandler) handleCreateDirectory(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -481,7 +564,7 @@ func (fs *FilesystemHandler) handleCreateDirectory(ctx context.Context, request 
 
 // handleDeleteFile deletes a file or directory
 func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.Params.Arguments["path"].(string)
+	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
@@ -527,7 +610,7 @@ func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.C
 	}
 
 	recursive := false
-	if recursiveParam, ok := request.Params.Arguments["recursive"]; ok {
+	if recursiveParam, ok := request.GetArguments()["recursive"]; ok {
 		if r, ok := recursiveParam.(bool); ok {
 			recursive = r
 		}
@@ -571,6 +654,78 @@ func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.C
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.TextContent{Type: "text", Text: fmt.Sprintf("Successfully deleted file %s", path)},
+		},
+	}, nil
+}
+
+// handleReadMediaFile reads a media file and returns it base64-encoded with its MIME type.
+func (fs *FilesystemHandler) handleReadMediaFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, ok := request.GetArguments()["path"].(string)
+	if !ok {
+		return nil, fmt.Errorf("path must be a string")
+	}
+
+	validPath, err := fs.validatePath(path)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+
+	info, err := os.Stat(validPath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+	if info.IsDir() {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: "Error: path is a directory, not a file"},
+			},
+			IsError: true,
+		}, nil
+	}
+
+	content, err := os.ReadFile(validPath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error reading file: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+
+	mimeType := detectMimeType(validPath)
+	encoded := base64.StdEncoding.EncodeToString(content)
+
+	if isImageFile(mimeType) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.ImageContent{
+					Type:     "image",
+					Data:     encoded,
+					MIMEType: mimeType,
+				},
+			},
+		}, nil
+	}
+
+	// Audio and other binary files: return as blob resource
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{
+				Type: "text",
+				Text: fmt.Sprintf("file: %s\nmime_type: %s\nsize: %d bytes\nencoding: base64\ndata: %s",
+					validPath, mimeType, info.Size(), encoded),
+			},
 		},
 	}, nil
 }

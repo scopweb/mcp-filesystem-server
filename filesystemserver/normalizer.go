@@ -357,8 +357,9 @@ func FixLiteralEscapes(s string) string {
 func (fs *FilesystemHandler) withNormalize(tool string, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
 	normalizer := NewNormalizer()
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if request.Params.Arguments != nil {
-			normalizer.Normalize(tool, request.Params.Arguments)
+		fs.tryFetchRoots(ctx)
+		if args := request.GetArguments(); args != nil {
+			normalizer.Normalize(tool, args)
 		}
 		return handler(ctx, request)
 	}

@@ -2,6 +2,20 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-03-21
+
+### Added
+- **Tool Annotations** — all 29 tools carry `readOnlyHint`, `destructiveHint`, and `idempotentHint` annotations. MCP clients use these to improve UX and gate destructive operations.
+- **MCP Roots support** — server declares `roots` capability. On the first tool call the handler fetches allowed directories from the client via `roots/list` and merges them with any CLI-supplied paths. `FilesystemHandler` is now thread-safe (`sync.RWMutex`). New `UpdateAllowedDirs()` method for external updates.
+- **`read_media_file` tool** — reads any binary file and returns it as `ImageContent` (images) or base64 text blob (audio/other binary) with MIME type detection.
+- **`edit_file` `dry_run` mode** — new optional boolean parameter. When `true`, the diff is computed and returned as preview without writing the file.
+- **Atomic `write_file`** — writes go through a temp file in the same directory, then `os.Rename()` to the target. Prevents data loss from partial writes.
+- Server can start without CLI arguments — allowed directories may be provided entirely via MCP Roots.
+
+### Fixed
+- `search_files` now supports glob patterns (`*.go`, `test_*.txt`) in addition to plain substring matching.
+- `file_edit_test.go` updated for mcp-go v0.45.0 (`mcp.CallToolParams` struct change).
+
 ## [0.5.0] - 2026-03-19
 
 ### Added

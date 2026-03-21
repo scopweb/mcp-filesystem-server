@@ -1,6 +1,10 @@
 package filesystemserver
 
-import "time"
+import (
+	"context"
+	"sync"
+	"time"
+)
 
 const (
 	// Maximum size for inline content (5MB)
@@ -34,8 +38,11 @@ type FileNode struct {
 
 // FilesystemHandler manages file system operations
 type FilesystemHandler struct {
-	allowedDirs []string
-	limiter     *rateLimiter
+	allowedDirs    []string
+	limiter        *rateLimiter
+	mu             sync.RWMutex
+	rootsFetched   bool
+	requestRootsFn func(ctx context.Context) ([]string, error)
 }
 
 // FileDiff represents the result of file comparison

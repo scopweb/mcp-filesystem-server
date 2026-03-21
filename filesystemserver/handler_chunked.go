@@ -12,10 +12,10 @@ import (
 
 // handleChunkedWrite - Escribe archivo en fragmentos de 1MB
 func (fs *FilesystemHandler) handleChunkedWrite(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
-	content, _ := request.Params.Arguments["content"].(string)
-	chunkIndex, _ := request.Params.Arguments["chunk_index"].(float64)
-	totalChunks, _ := request.Params.Arguments["total_chunks"].(float64)
+	path, _ := request.GetArguments()["path"].(string)
+	content, _ := request.GetArguments()["content"].(string)
+	chunkIndex, _ := request.GetArguments()["chunk_index"].(float64)
+	totalChunks, _ := request.GetArguments()["total_chunks"].(float64)
 
 	if path == "" || content == "" {
 		return &mcp.CallToolResult{
@@ -102,8 +102,8 @@ func (fs *FilesystemHandler) handleChunkedWrite(ctx context.Context, request mcp
 
 // handleSplitFile - Divide archivo en múltiples fragmentos
 func (fs *FilesystemHandler) handleSplitFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
-	chunkSizeParam, _ := request.Params.Arguments["chunk_size"].(float64)
+	path, _ := request.GetArguments()["path"].(string)
+	chunkSizeParam, _ := request.GetArguments()["chunk_size"].(float64)
 
 	if path == "" {
 		return &mcp.CallToolResult{
@@ -204,8 +204,8 @@ func (fs *FilesystemHandler) handleSplitFile(ctx context.Context, request mcp.Ca
 
 // handleJoinFiles - Une múltiples fragmentos en un archivo
 func (fs *FilesystemHandler) handleJoinFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	targetPath, _ := request.Params.Arguments["target_path"].(string)
-	sourceFilesParam, _ := request.Params.Arguments["source_files"].([]interface{})
+	targetPath, _ := request.GetArguments()["target_path"].(string)
+	sourceFilesParam, _ := request.GetArguments()["source_files"].([]interface{})
 
 	if targetPath == "" || len(sourceFilesParam) == 0 {
 		return &mcp.CallToolResult{
@@ -305,9 +305,9 @@ func (fs *FilesystemHandler) handleJoinFiles(ctx context.Context, request mcp.Ca
 
 // handleWriteFileSafe - Escritura con backup automático
 func (fs *FilesystemHandler) handleWriteFileSafe(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
-	content, _ := request.Params.Arguments["content"].(string)
-	createBackup, _ := request.Params.Arguments["create_backup"].(bool)
+	path, _ := request.GetArguments()["path"].(string)
+	content, _ := request.GetArguments()["content"].(string)
+	createBackup, _ := request.GetArguments()["create_backup"].(bool)
 
 	if path == "" || content == "" {
 		return &mcp.CallToolResult{

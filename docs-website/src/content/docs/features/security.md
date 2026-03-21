@@ -7,12 +7,12 @@ description: Path validation, allow-lists, and access control.
 
 | Access Type | Scope | Details |
 |-------------|-------|---------|
-| Filesystem | Read/Write | Limited to directories passed at startup |
+| Filesystem | Read/Write | Limited to allowed directories (CLI args or MCP Roots) |
 | Network | None | Stdio transport only, no outbound connections |
 | System | None | No process execution, no system calls |
 
 :::danger[Important]
-Only pass directories you trust as arguments. The server has full read/write access within allowed paths.
+Only pass directories you trust as arguments (or expose via MCP Roots). The server has full read/write access within allowed paths.
 :::
 
 ## Path Validation
@@ -28,13 +28,34 @@ If any check fails, the operation is rejected before touching the filesystem.
 
 ## Allow-list
 
+### CLI arguments
+
 Allowed directories are passed as command-line arguments at startup:
 
 ```bash
 mcp-filesystem-server /home/user/projects /tmp/scratch
 ```
 
-Only these directories (and their subdirectories) are accessible. Everything else is denied.
+### MCP Roots
+
+The server declares the `roots` capability. If the MCP client provides roots via `roots/list`, those directories are merged into the allow-list on the first tool call. This allows clients to dynamically configure access without restarting the server.
+
+The server can start with no CLI arguments and rely entirely on roots from the client:
+
+```bash
+mcp-filesystem-server   # roots will be provided by the client
+```
+
+Only the resulting merged list of directories (and their subdirectories) is accessible. Everything else is denied.
+
+## Atomic Writes
+
+`write_file` uses an atomic write pattern:
+1. Content is written to a temporary file in the same directory.
+2. `os.Rename()` atomically replaces the target.
+3. On any error, the temporary file is removed.
+
+This prevents data loss from partial writes and eliminates race conditions. `write_file_safe` and `chunked_write` use the same pattern.
 
 ## Symlink Handling
 

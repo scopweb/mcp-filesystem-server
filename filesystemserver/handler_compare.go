@@ -12,9 +12,9 @@ import (
 
 // handleCompareFiles - Comparación avanzada de archivos
 func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	file1, _ := request.Params.Arguments["file1"].(string)
-	file2, _ := request.Params.Arguments["file2"].(string)
-	format, _ := request.Params.Arguments["format"].(string)
+	file1, _ := request.GetArguments()["file1"].(string)
+	file2, _ := request.GetArguments()["file2"].(string)
+	format, _ := request.GetArguments()["format"].(string)
 
 	if file1 == "" || file2 == "" {
 		return &mcp.CallToolResult{

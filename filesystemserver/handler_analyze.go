@@ -12,7 +12,7 @@ import (
 
 // handleAnalyzeProject - Análisis completo de estructura de proyecto
 func (fs *FilesystemHandler) handleAnalyzeProject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
+	path, _ := request.GetArguments()["path"].(string)
 	if path == "" {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

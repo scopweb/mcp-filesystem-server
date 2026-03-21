@@ -12,7 +12,7 @@ import (
 
 // handleBatchEdit - Operaciones en lote para múltiples archivos
 func (fs *FilesystemHandler) handleBatchEdit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	operationsParam, ok := request.Params.Arguments["operations"].([]interface{})
+	operationsParam, ok := request.GetArguments()["operations"].([]interface{})
 	if !ok {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

@@ -86,13 +86,7 @@ func TestFileEdits(t *testing.T) {
 func testEditFile(t *testing.T, handler *FilesystemHandler, filePath, oldText, newText, expected string) {
 	// Create the request structure that matches the actual implementation
 	req := mcp.CallToolRequest{
-		Params: struct {
-			Name      string                 `json:"name"`
-			Arguments map[string]interface{} `json:"arguments,omitempty"`
-			Meta      *struct {
-				ProgressToken mcp.ProgressToken `json:"progressToken,omitempty"`
-			} `json:"_meta,omitempty"`
-		}{
+		Params: mcp.CallToolParams{
 			Name: "edit_file",
 			Arguments: map[string]interface{}{
 				"path":     filePath,

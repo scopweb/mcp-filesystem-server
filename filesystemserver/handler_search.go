@@ -16,10 +16,10 @@ import (
 
 // handleSmartSearch - Búsqueda inteligente con regex y filtros
 func (fs *FilesystemHandler) handleSmartSearch(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
-	pattern, _ := request.Params.Arguments["pattern"].(string)
-	includeContent, _ := request.Params.Arguments["include_content"].(bool)
-	fileTypesParam, _ := request.Params.Arguments["file_types"].([]interface{})
+	path, _ := request.GetArguments()["path"].(string)
+	pattern, _ := request.GetArguments()["pattern"].(string)
+	includeContent, _ := request.GetArguments()["include_content"].(bool)
+	fileTypesParam, _ := request.GetArguments()["file_types"].([]interface{})
 
 	if path == "" || pattern == "" {
 		return &mcp.CallToolResult{
@@ -79,13 +79,13 @@ func (fs *FilesystemHandler) handleSmartSearch(ctx context.Context, request mcp.
 
 // handleAdvancedTextSearch - Búsqueda avanzada de texto con contexto
 func (fs *FilesystemHandler) handleAdvancedTextSearch(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
-	pattern, _ := request.Params.Arguments["pattern"].(string)
-	caseSensitive, _ := request.Params.Arguments["case_sensitive"].(bool)
-	wholeWord, _ := request.Params.Arguments["whole_word"].(bool)
-	includeContext, _ := request.Params.Arguments["include_context"].(bool)
+	path, _ := request.GetArguments()["path"].(string)
+	pattern, _ := request.GetArguments()["pattern"].(string)
+	caseSensitive, _ := request.GetArguments()["case_sensitive"].(bool)
+	wholeWord, _ := request.GetArguments()["whole_word"].(bool)
+	includeContext, _ := request.GetArguments()["include_context"].(bool)
 	contextLines := 3
-	if cl, ok := request.Params.Arguments["context_lines"].(float64); ok {
+	if cl, ok := request.GetArguments()["context_lines"].(float64); ok {
 		contextLines = int(cl)
 	}
 
@@ -332,7 +332,7 @@ func minInt(a, b int) int {
 
 // handleFindDuplicates - Encuentra archivos duplicados por hash
 func (fs *FilesystemHandler) handleFindDuplicates(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, _ := request.Params.Arguments["path"].(string)
+	path, _ := request.GetArguments()["path"].(string)
 	if path == "" {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

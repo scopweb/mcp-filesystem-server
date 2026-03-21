@@ -1,6 +1,6 @@
 ---
 title: Tools Reference
-description: All 27 tools available in MCP Filesystem Server.
+description: All 29 tools available in MCP Filesystem Server.
 ---
 
 ## File Operations
@@ -31,10 +31,19 @@ Replace specific text in a file without rewriting the whole file. Supports intel
 | `path` | string | Yes | Path to the file |
 | `old_text` | string | Yes | Text to replace |
 | `new_text` | string | Yes | Replacement text |
+| `dry_run` | boolean | No | Preview diff without writing (default: false) |
 
 :::tip
 The normalizer accepts `old_str`, `oldText`, and other aliases for `old_text`. You don't need to worry about the exact parameter name.
 :::
+
+### `read_media_file`
+
+Read a media file (image, audio, or other binary) and return it base64-encoded with its MIME type. Returns `ImageContent` for images so clients can render them inline.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Path to the media file |
 
 ### `copy_file`
 
