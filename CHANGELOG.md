@@ -2,6 +2,14 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.4] - 2026-03-23
+
+### Fixed
+- **`read_file` line range memory** — now streams with `bufio.Scanner` instead of `os.ReadFile`. Large files are no longer fully loaded into memory when only a line range is requested.
+- **Dead code removed** — `handleAdvancedTextSearch`, `performAdvancedTextSearch`, and `maxInt`/`minInt` helpers were never registered or used; deleted.
+
+---
+
 ## [0.6.3] - 2026-03-23
 
 ### Added

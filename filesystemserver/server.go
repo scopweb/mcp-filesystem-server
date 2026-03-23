@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.6.3"
+var Version = "0.6.4"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 

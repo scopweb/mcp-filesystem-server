@@ -1,6 +1,7 @@
 package filesystemserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -240,6 +241,70 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	mimeType := detectMimeType(validPath)
+
+	// For text files with a line range: stream with bufio — never loads the full file.
+	if lineRangeRequested && isTextFile(mimeType) {
+		f, err := os.Open(validPath)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error reading file: %v", err)},
+				},
+				IsError: true,
+			}, nil
+		}
+		defer f.Close()
+
+		actualStart := startLine
+		if actualStart < 1 {
+			actualStart = 1
+		}
+		actualEnd := endLine // 0 means read to EOF
+
+		scanner := bufio.NewScanner(f)
+		buf := make([]byte, 64*1024)
+		scanner.Buffer(buf, 4*1024*1024) // support lines up to 4 MB
+
+		var selected []string
+		lineNum := 0
+		for scanner.Scan() {
+			lineNum++
+			if lineNum >= actualStart {
+				selected = append(selected, scanner.Text())
+			}
+			if actualEnd > 0 && lineNum >= actualEnd {
+				break
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error reading file: %v", err)},
+				},
+				IsError: true,
+			}, nil
+		}
+
+		displayEnd := lineNum
+		if actualEnd > 0 && actualEnd <= lineNum {
+			displayEnd = actualEnd
+		}
+		if len(selected) == 0 {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Lines %d-%d: (out of range — file has %d lines)", actualStart, displayEnd, lineNum)},
+				},
+			}, nil
+		}
+		text := fmt.Sprintf("Lines %d-%d:\n%s", actualStart, displayEnd, strings.Join(selected, "\n"))
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: text},
+			},
+		}, nil
+	}
+
 	content, err := os.ReadFile(validPath)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -250,28 +315,10 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
-	mimeType := detectMimeType(validPath)
 	if isTextFile(mimeType) {
-		text := string(content)
-		if lineRangeRequested {
-			lines := strings.Split(text, "\n")
-			total := len(lines)
-			start := startLine
-			end := endLine
-			if start < 1 || start > total {
-				start = 1
-			}
-			if end < 1 || end > total {
-				end = total
-			}
-			if start > end {
-				start = end
-			}
-			text = fmt.Sprintf("Lines %d-%d/%d:\n%s", start, end, total, strings.Join(lines[start-1:end], "\n"))
-		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: text},
+				mcp.TextContent{Type: "text", Text: string(content)},
 			},
 		}, nil
 	} else if isImageFile(mimeType) {
