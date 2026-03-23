@@ -7,11 +7,17 @@ description: All 29 tools available in MCP Filesystem Server.
 
 ### `read_file`
 
-Read the complete contents of a file.
+Read the complete contents of a file, or a specific line range.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | Yes | Path to the file |
+| `start_line` | number | No | First line to read (1-based, inclusive) |
+| `end_line` | number | No | Last line to read (1-based, inclusive) |
+
+:::tip
+When `start_line`/`end_line` are set, the 5 MB inline limit is bypassed — ideal for reading a function or section from a large file without loading it entirely.
+:::
 
 ### `write_file`
 
@@ -92,7 +98,7 @@ Get file or directory metadata (size, permissions, timestamps).
 
 ### `list_directory`
 
-List all files and directories in a path.
+List the immediate contents of a single directory (one level, no recursion). Prefer this over `tree` or `search_files` when you only need what is directly inside a folder — faster and token-efficient.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -141,6 +147,11 @@ Intelligent search with regex, content matching, and file type filtering.
 | `pattern` | string | Yes | Search pattern (regex supported) |
 | `include_content` | boolean | No | Search inside files (default: false) |
 | `file_types` | array | No | Filter by extension (e.g., `[".js", ".go"]`) |
+| `context_lines` | number | No | Lines before/after each content match, like `grep -C N` (default: 0) |
+
+:::tip
+Set `context_lines: 3` with `include_content: true` to see matches with surrounding code — avoids a separate `read_file` call to understand the context.
+:::
 
 ### `find_duplicates`
 

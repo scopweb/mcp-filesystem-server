@@ -5,6 +5,34 @@ description: Version history for MCP Filesystem Server.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.3] - 2026-03-23
+
+### Added
+- **`smart_search` `context_lines`** — new optional number param. When `include_content` is true, each match includes N surrounding lines (before + after), equivalent to `grep -C N`. Default: 0.
+
+### Changed
+- `list_directory` tool description clarified: explicitly states it lists one level only, and when to prefer it over `tree` or `search_files`.
+
+---
+
+## [0.6.2] - 2026-03-23
+
+### Added
+- **`read_file` line range** — new optional `start_line` / `end_line` params (1-based, inclusive). Reads a section of a large file without loading it entirely. The 5 MB inline limit is bypassed when a line range is requested.
+
+---
+
+## [0.6.1] - 2026-03-23
+
+### Changed
+- Go upgraded to **1.26.1** (patch release with stdlib security fixes: GO-2026-4599..4602).
+- `golang.org/x/net` upgraded `v0.21.0` → `v0.38.0` (fixes GO-2025-3595 XSS in HTML tokenizer).
+
+### Fixed
+- `go vet` warnings in `handler.go`: replaced `fmt.Errorf(err.Error())` with `return nil, err`.
+
+---
+
 ## [0.6.0] - 2026-03-21
 
 ### Added
