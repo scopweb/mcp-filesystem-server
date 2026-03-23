@@ -2,6 +2,13 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.3] - 2026-03-23
+
+### Added
+- **`smart_search` `context_lines`** — new optional number param. When `include_content` is true and `context_lines` is set, each content match includes N lines before and after (equivalent to `grep -C N`). Default: 0 (no context).
+
+---
+
 ## [0.6.2] - 2026-03-23
 
 ### Added

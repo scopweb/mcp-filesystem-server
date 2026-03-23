@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.6.2"
+var Version = "0.6.3"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
@@ -257,6 +257,9 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		),
 		mcp.WithArray("file_types",
 			mcp.Description("Filter by file extensions (e.g., ['.js', '.py', '.go'])"),
+		),
+		mcp.WithNumber("context_lines",
+			mcp.Description("Number of lines to show before and after each content match (like grep -C N). Default: 0."),
 		),
 	), h.withNormalize("smart_search", h.handleSmartSearch))
 

@@ -20,6 +20,10 @@ func (fs *FilesystemHandler) handleSmartSearch(ctx context.Context, request mcp.
 	pattern, _ := request.GetArguments()["pattern"].(string)
 	includeContent, _ := request.GetArguments()["include_content"].(bool)
 	fileTypesParam, _ := request.GetArguments()["file_types"].([]interface{})
+	contextLines := 0
+	if cl, ok := request.GetArguments()["context_lines"].(float64); ok && cl >= 0 {
+		contextLines = int(cl)
+	}
 
 	if path == "" || pattern == "" {
 		return &mcp.CallToolResult{
@@ -54,7 +58,7 @@ func (fs *FilesystemHandler) handleSmartSearch(ctx context.Context, request mcp.
 		}
 	}
 
-	results, err := fs.performSmartSearch(validPath, pattern, includeContent, fileTypes)
+	results, err := fs.performSmartSearch(validPath, pattern, includeContent, fileTypes, contextLines)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -150,7 +154,7 @@ func (fs *FilesystemHandler) handleAdvancedTextSearch(ctx context.Context, reque
 }
 
 // performSmartSearch - Implementación de búsqueda inteligente
-func (fs *FilesystemHandler) performSmartSearch(path, pattern string, includeContent bool, fileTypes []string) (string, error) {
+func (fs *FilesystemHandler) performSmartSearch(path, pattern string, includeContent bool, fileTypes []string, contextLines int) (string, error) {
 	var results []string
 	var contentMatches []SearchMatch
 
@@ -205,6 +209,15 @@ func (fs *FilesystemHandler) performSmartSearch(path, pattern string, includeCon
 								LineNumber: lineNum + 1,
 								Line:       strings.TrimSpace(line),
 							}
+							if contextLines > 0 {
+								start := max(0, lineNum-contextLines)
+								end := min(len(lines), lineNum+contextLines+1)
+								for i := start; i < end; i++ {
+									if i != lineNum {
+										match.Context = append(match.Context, lines[i])
+									}
+								}
+							}
 							contentMatches = append(contentMatches, match)
 						}
 					}
@@ -233,6 +246,9 @@ func (fs *FilesystemHandler) performSmartSearch(path, pattern string, includeCon
 		resultBuilder.WriteString(fmt.Sprintf("📝 Content matches (%d):\n", len(contentMatches)))
 		for _, match := range contentMatches {
 			resultBuilder.WriteString(fmt.Sprintf("  📁 %s:%d - %s\n", match.File, match.LineNumber, match.Line))
+			for _, ctxLine := range match.Context {
+				resultBuilder.WriteString(fmt.Sprintf("    │ %s\n", ctxLine))
+			}
 		}
 	}
 

@@ -48,7 +48,7 @@ docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 
 **File operations**: `read_file` (supports `start_line`/`end_line`), `write_file`, `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
 
-**Analysis**: `analyze_file`, `analyze_project`, `smart_search`, `find_duplicates`, `compare_files`, `performance_analysis`, `generate_report`
+**Analysis**: `analyze_file`, `analyze_project`, `smart_search` (supports `context_lines`), `find_duplicates`, `compare_files`, `performance_analysis`, `generate_report`
 
 **Batch & advanced**: `batch_operations`, `assist_refactor`, `plan_task`, `smart_sync`
 
