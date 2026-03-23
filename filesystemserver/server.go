@@ -81,7 +81,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
 	s.AddTool(mcp.NewTool(
 		"list_directory",
-		mcp.WithDescription("Get a detailed listing of all files and directories in a specified path."),
+		mcp.WithDescription("List immediate contents of a single directory (one level, no recursion). Prefer this over tree or search_files when you only need what is directly inside a folder — faster and token-efficient."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
