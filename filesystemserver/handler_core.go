@@ -152,12 +152,26 @@ func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 	return false
 }
 
-// handleReadFile reads file contents
+// handleReadFile reads file contents, optionally limited to a line range.
 func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
 	}
+
+	// Optional line range (1-based, inclusive on both ends)
+	startLine, endLine := 0, 0
+	if v, ok := request.GetArguments()["start_line"]; ok {
+		if n, ok := v.(float64); ok && n >= 1 {
+			startLine = int(n)
+		}
+	}
+	if v, ok := request.GetArguments()["end_line"]; ok {
+		if n, ok := v.(float64); ok && n >= 1 {
+			endLine = int(n)
+		}
+	}
+	lineRangeRequested := startLine > 0 || endLine > 0
 
 	if path == "." || path == "./" {
 		cwd, err := os.Getwd()
@@ -209,7 +223,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
-	if info.Size() > MAX_INLINE_SIZE {
+	if info.Size() > MAX_INLINE_SIZE && !lineRangeRequested {
 		resourceURI := pathToResourceURI(validPath)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -238,9 +252,26 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 
 	mimeType := detectMimeType(validPath)
 	if isTextFile(mimeType) {
+		text := string(content)
+		if lineRangeRequested {
+			lines := strings.Split(text, "\n")
+			total := len(lines)
+			start := startLine
+			end := endLine
+			if start < 1 || start > total {
+				start = 1
+			}
+			if end < 1 || end > total {
+				end = total
+			}
+			if start > end {
+				start = end
+			}
+			text = fmt.Sprintf("Lines %d-%d/%d:\n%s", start, end, total, strings.Join(lines[start-1:end], "\n"))
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: string(content)},
+				mcp.TextContent{Type: "text", Text: text},
 			},
 		}, nil
 	} else if isImageFile(mimeType) {

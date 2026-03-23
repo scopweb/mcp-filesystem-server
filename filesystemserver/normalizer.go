@@ -161,6 +161,8 @@ func builtInRules() []NormalizationRule {
 		{ID: "chunk_index-number", Tools: []string{"*"}, Type: RuleTypeCoerce, From: "chunk_index", CoerceTo: "number"},
 		{ID: "total_chunks-number", Tools: []string{"*"}, Type: RuleTypeCoerce, From: "total_chunks", CoerceTo: "number"},
 		{ID: "chunk_size-number", Tools: []string{"*"}, Type: RuleTypeCoerce, From: "chunk_size", CoerceTo: "number"},
+		{ID: "start_line-number", Tools: []string{"*"}, Type: RuleTypeCoerce, From: "start_line", CoerceTo: "number"},
+		{ID: "end_line-number", Tools: []string{"*"}, Type: RuleTypeCoerce, From: "end_line", CoerceTo: "number"},
 
 		// ── JSON accept-both ────────────────────────────────────────────
 		{ID: "paths-json", Tools: []string{"read_multiple_files"}, Type: RuleJSONAcceptAny, From: "paths"},

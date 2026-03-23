@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.6.1"
+var Version = "0.6.2"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
@@ -49,12 +49,18 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	// aliasing, type coercion, and JSON flexibility (ported from ultra).
 	s.AddTool(mcp.NewTool(
 		"read_file",
-		mcp.WithDescription("Read the complete contents of a file from the file system."),
+		mcp.WithDescription("Read the complete contents of a file from the file system. Use start_line/end_line to read a specific range without loading the entire file."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
 			mcp.Description("Path to the file to read"),
 			mcp.Required(),
+		),
+		mcp.WithNumber("start_line",
+			mcp.Description("First line to read, 1-based inclusive (optional)"),
+		),
+		mcp.WithNumber("end_line",
+			mcp.Description("Last line to read, 1-based inclusive (optional). Defaults to end of file."),
 		),
 	), h.withNormalize("read_file", h.handleReadFile))
 

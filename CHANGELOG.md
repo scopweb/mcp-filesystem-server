@@ -2,6 +2,13 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.2] - 2026-03-23
+
+### Added
+- **`read_file` line range** — new optional `start_line` / `end_line` params (1-based, inclusive). Reads a section of a large file without loading it entirely, reducing context token usage. The 5 MB inline limit is bypassed when a line range is requested.
+
+---
+
 ## [0.6.1] - 2026-03-23
 
 ### Changed
