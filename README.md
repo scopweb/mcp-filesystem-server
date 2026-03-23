@@ -33,13 +33,15 @@ docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 
 ## Tools
 
-**File operations**: `read_file`, `write_file`, `edit_file`, `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
+**File operations**: `read_file`, `write_file`, `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
 
 **Analysis**: `analyze_file`, `analyze_project`, `smart_search`, `find_duplicates`, `compare_files`, `performance_analysis`, `generate_report`
 
 **Batch & advanced**: `batch_operations`, `assist_refactor`, `plan_task`, `smart_sync`
 
 **Large files**: `chunked_write`, `split_file`, `join_files`, `write_file_safe`
+
+**Media**: `read_media_file` — reads images as `ImageContent`, other binary files as base64 text with MIME type
 
 ## Normalizer
 
@@ -61,7 +63,7 @@ All paths validated against an allow-list. Symlinks resolved and re-checked. Pat
 
 | | This server | [ultra](https://github.com/scopweb/mcp-filesystem-go-ultra) |
 |---|---|---|
-| Tools | 27 | 16 (consolidated) |
+| Tools | 29 | 16 (consolidated) |
 | Normalizer | Yes (ported) | Yes (original) |
 | Backup/restore | No | Yes |
 | Pipeline executor | No | Yes |

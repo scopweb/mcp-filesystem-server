@@ -2,6 +2,17 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.6.1] - 2026-03-23
+
+### Changed
+- Go upgraded to **1.26.1** (patch release with stdlib security fixes).
+- `golang.org/x/net` upgraded `v0.21.0` → `v0.38.0` (fixes [GO-2025-3595](https://pkg.go.dev/vuln/GO-2025-3595) XSS in HTML tokenizer).
+
+### Fixed
+- `go vet` warnings in `handler.go`: replaced `fmt.Errorf(err.Error())` with direct `return nil, err`.
+
+---
+
 ## [0.6.0] - 2026-03-21
 
 ### Added

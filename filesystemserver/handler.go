@@ -45,7 +45,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	}
 
 	if err := fs.validateEditableFile(validPath); err != nil {
-		return nil, fmt.Errorf(err.Error())
+		return nil, err
 	}
 
 	backupPath, err := fs.createBackup(validPath)
@@ -66,7 +66,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	analysis := fs.analyzeContent(string(content), oldText)
 	result, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
 	if err != nil {
-		return nil, fmt.Errorf(err.Error())
+		return nil, err
 	}
 
 	// Already-present: no write needed, return success with hint (ported from ultra)

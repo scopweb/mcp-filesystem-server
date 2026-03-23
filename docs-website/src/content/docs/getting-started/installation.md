@@ -7,7 +7,7 @@ description: Install and configure MCP Filesystem Server.
 
 | Requirement | Minimum | Check |
 |-------------|---------|-------|
-| Go          | 1.21+   | `go version` |
+| Go          | 1.26.1+ | `go version` |
 
 ## Install
 
