@@ -281,13 +281,14 @@ func TestSearchFiles_Valid(t *testing.T) {
 	require.NoError(t, err)
 
 	request := mcp.CallToolRequest{}
-	request.Params.Name = "search_files"
+	request.Params.Name = "search"
 	request.Params.Arguments = map[string]any{
-		"path": dir,
+		"path":    dir,
+		"mode":    "files",
 		"pattern": "*.txt",
 	}
 
-	result, err := handler.handleSearchFiles(context.Background(), request)
+	result, err := handler.handleSearch(context.Background(), request)
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "test1.txt")
@@ -300,13 +301,14 @@ func TestSearchFiles_NoResults(t *testing.T) {
 	require.NoError(t, err)
 
 	request := mcp.CallToolRequest{}
-	request.Params.Name = "search_files"
+	request.Params.Name = "search"
 	request.Params.Arguments = map[string]any{
-		"path": dir,
+		"path":    dir,
+		"mode":    "files",
 		"pattern": "*.jpg",
 	}
 
-	result, err := handler.handleSearchFiles(context.Background(), request)
+	result, err := handler.handleSearch(context.Background(), request)
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "No files found")

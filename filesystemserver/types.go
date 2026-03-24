@@ -43,6 +43,7 @@ type FilesystemHandler struct {
 	mu             sync.RWMutex
 	rootsFetched   bool
 	requestRootsFn func(ctx context.Context) ([]string, error)
+	auditLogger    *AuditLogger
 }
 
 // FileDiff represents the result of file comparison

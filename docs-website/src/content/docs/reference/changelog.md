@@ -5,6 +5,40 @@ description: Version history for MCP Filesystem Server.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [1.0.0] - 2026-03-23
+
+### Added
+- **`search` tool** — unified search replacing three separate tools. Use `mode: "files"` (name/glob), `mode: "content"` (regex + `context_lines`), or `mode: "duplicates"` (MD5 hash scan).
+- **`write_file` `create_backup`** — optional boolean. Creates a `.backup` copy of the existing file before overwriting.
+- **`write_file` chunked streaming** — optional `chunk_index` / `total_chunks` params replace the old `chunked_write` tool.
+
+### Removed (breaking)
+
+| Old tool | Migration |
+|----------|-----------|
+| `search_files` | `search` with `mode: "files"` |
+| `smart_search` | `search` with `mode: "content"` |
+| `find_duplicates` | `search` with `mode: "duplicates"` |
+| `write_file_safe` | `write_file` with `create_backup: true` |
+| `chunked_write` | `write_file` with `chunk_index` + `total_chunks` |
+| `split_file` | removed |
+| `join_files` | removed |
+| `analyze_file` | removed (was stub) |
+| `performance_analysis` | removed (was stub) |
+| `generate_report` | removed (was stub) |
+| `smart_sync` | removed (was stub) |
+| `assist_refactor` | removed (was stub) |
+
+---
+
+## [0.6.4] - 2026-03-23
+
+### Fixed
+- **`read_file` line range memory** — now streams with `bufio.Scanner`. Large files no longer fully loaded when only a line range is requested.
+- **Dead code removed** — `handleAdvancedTextSearch` and helpers deleted.
+
+---
+
 ## [0.6.3] - 2026-03-23
 
 ### Added

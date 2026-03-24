@@ -13,6 +13,7 @@ import (
 
 // handleEditFile handles file editing operations
 func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "edit.parse_arguments")
 	params := make(map[string]string)
 	requiredParams := []string{"path", "old_text", "new_text"}
 
@@ -39,38 +40,47 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	oldText := params["old_text"]
 	newText := params["new_text"]
 
+	appendSubOperation(ctx, "edit.validate_path")
 	validPath, err := fs.validatePath(path)
 	if err != nil {
 		return nil, fmt.Errorf("path error: %v", err)
 	}
 
+	appendSubOperation(ctx, "edit.validate_editable")
 	if err := fs.validateEditableFile(validPath); err != nil {
 		return nil, err
 	}
 
+	appendSubOperation(ctx, "edit.create_backup")
 	backupPath, err := fs.createBackup(validPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not create backup: %v", err)
 	}
 	defer func() {
 		if backupPath != "" {
+			appendSubOperation(ctx, "edit.cleanup_backup")
 			os.Remove(backupPath)
 		}
 	}()
 
+	appendSubOperation(ctx, "edit.read_file")
 	content, err := os.ReadFile(validPath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
+	appendSubOperation(ctx, "edit.analyze_content")
 	analysis := fs.analyzeContent(string(content), oldText)
+	appendSubOperation(ctx, "edit.compute_replacement")
 	result, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
 	if err != nil {
 		return nil, err
 	}
+	appendSubOperation(ctx, "edit.match_confidence."+result.MatchConfidence)
 
 	// Already-present: no write needed, return success with hint (ported from ultra)
 	if result.MatchConfidence == "already_present" {
+		appendSubOperation(ctx, "edit.already_present")
 		if backupPath != "" {
 			os.Remove(backupPath)
 			backupPath = ""
@@ -87,6 +97,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 
 	// No match: don't write, return 0 replacements (non-blocking like ultra)
 	if result.ReplacementCount == 0 {
+		appendSubOperation(ctx, "edit.no_match")
 		if backupPath != "" {
 			os.Remove(backupPath)
 			backupPath = ""
@@ -111,6 +122,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	}
 
 	if dryRun {
+		appendSubOperation(ctx, "edit.dry_run")
 		if backupPath != "" {
 			os.Remove(backupPath)
 			backupPath = ""
@@ -127,6 +139,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	appendSubOperation(ctx, "edit.write_file")
 	if err := os.WriteFile(validPath, []byte(result.ModifiedContent), 0644); err != nil {
 		return nil, fmt.Errorf("error writing file: %v", err)
 	}
@@ -252,65 +265,4 @@ func (fs *FilesystemHandler) handleReadResource(ctx context.Context, request mcp
 			}, nil
 		}
 	}
-}
-
-// Placeholder handlers - implementaciones básicas
-func (fs *FilesystemHandler) handleAnalyzeFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-// handleAnalyzeProject - Implementado en handler_analyze.go
-
-// handleGenerateChecksum - Implementado en handler_analyze.go
-
-func (fs *FilesystemHandler) handleAnalyzeDependencies(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-func (fs *FilesystemHandler) handleCodeQualityCheck(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-func (fs *FilesystemHandler) handlePerformanceAnalysis(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-func (fs *FilesystemHandler) handleGenerateReport(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-func (fs *FilesystemHandler) handleSmartSync(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
-}
-
-func (fs *FilesystemHandler) handleAssistRefactor(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: "Feature not implemented yet"},
-		},
-	}, nil
 }

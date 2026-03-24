@@ -12,6 +12,7 @@ import (
 
 // handleCompareFiles - Comparación avanzada de archivos
 func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "compare.parse_arguments")
 	file1, _ := request.GetArguments()["file1"].(string)
 	file2, _ := request.GetArguments()["file2"].(string)
 	format, _ := request.GetArguments()["format"].(string)
@@ -29,6 +30,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 		format = "unified"
 	}
 
+	appendSubOperation(ctx, "compare.validate.file1")
 	validPath1, err := fs.validatePath(file1)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -39,6 +41,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 		}, nil
 	}
 
+	appendSubOperation(ctx, "compare.validate.file2")
 	validPath2, err := fs.validatePath(file2)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -50,6 +53,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 	}
 
 	// Verificar que ambos archivos existen
+	appendSubOperation(ctx, "compare.stat.file1")
 	if _, err := os.Stat(validPath1); os.IsNotExist(err) {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -59,6 +63,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 		}, nil
 	}
 
+	appendSubOperation(ctx, "compare.stat.file2")
 	if _, err := os.Stat(validPath2); os.IsNotExist(err) {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -68,7 +73,8 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 		}, nil
 	}
 
-	diff, err := fs.compareFiles(validPath1, validPath2, format)
+	appendSubOperation(ctx, "compare.execute")
+	diff, err := fs.compareFiles(ctx, validPath1, validPath2, format)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -80,6 +86,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 
 	// Si los archivos son idénticos
 	if diff.Similar == 100.0 {
+		appendSubOperation(ctx, "compare.identical")
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: "✅ Files are identical"},
@@ -87,6 +94,7 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 		}, nil
 	}
 
+	appendSubOperation(ctx, "compare.render_result")
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("🔍 File Comparison Results:\n\n"))
 	result.WriteString(fmt.Sprintf("📁 File 1: %s\n", file1))
@@ -127,25 +135,30 @@ func (fs *FilesystemHandler) handleCompareFiles(ctx context.Context, request mcp
 }
 
 // compareFiles - Realiza la comparación entre dos archivos
-func (fs *FilesystemHandler) compareFiles(path1, path2, format string) (*FileDiff, error) {
+func (fs *FilesystemHandler) compareFiles(ctx context.Context, path1, path2, format string) (*FileDiff, error) {
+	appendSubOperation(ctx, "compare.detect_mime")
 	// Verificar si son archivos de texto
 	mimeType1 := detectMimeType(path1)
 	mimeType2 := detectMimeType(path2)
 
 	if !isTextFile(mimeType1) || !isTextFile(mimeType2) {
-		return fs.compareBinaryFiles(path1, path2)
+		appendSubOperation(ctx, "compare.mode.binary")
+		return fs.compareBinaryFiles(ctx, path1, path2)
 	}
 
-	return fs.compareTextFiles(path1, path2, format)
+	appendSubOperation(ctx, "compare.mode.text")
+	return fs.compareTextFiles(ctx, path1, path2, format)
 }
 
 // compareTextFiles - Compara archivos de texto línea por línea
-func (fs *FilesystemHandler) compareTextFiles(path1, path2, format string) (*FileDiff, error) {
+func (fs *FilesystemHandler) compareTextFiles(ctx context.Context, path1, path2, format string) (*FileDiff, error) {
+	appendSubOperation(ctx, "compare.text.read_file1")
 	lines1, err := readFileLines(path1)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file1: %v", err)
 	}
 
+	appendSubOperation(ctx, "compare.text.read_file2")
 	lines2, err := readFileLines(path2)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file2: %v", err)
@@ -168,6 +181,7 @@ func (fs *FilesystemHandler) compareTextFiles(path1, path2, format string) (*Fil
 		lines2Map[line] = true
 	}
 
+	appendSubOperation(ctx, "compare.text.compute_diff")
 	// Encontrar líneas agregadas (en file2 pero no en file1)
 	for _, line := range lines2 {
 		if !lines1Map[line] {
@@ -198,18 +212,21 @@ func (fs *FilesystemHandler) compareTextFiles(path1, path2, format string) (*Fil
 	}
 
 	// Para líneas modificadas, intentar encontrar líneas similares
+	appendSubOperation(ctx, "compare.text.find_modified")
 	diff.Modified = fs.findModifiedLines(diff.Removed, diff.Added)
 
 	return diff, nil
 }
 
 // compareBinaryFiles - Compara archivos binarios por hash
-func (fs *FilesystemHandler) compareBinaryFiles(path1, path2 string) (*FileDiff, error) {
+func (fs *FilesystemHandler) compareBinaryFiles(ctx context.Context, path1, path2 string) (*FileDiff, error) {
+	appendSubOperation(ctx, "compare.binary.hash_file1")
 	hash1, err := calculateFileMD5(path1)
 	if err != nil {
 		return nil, fmt.Errorf("error calculating hash for file1: %v", err)
 	}
 
+	appendSubOperation(ctx, "compare.binary.hash_file2")
 	hash2, err := calculateFileMD5(path2)
 	if err != nil {
 		return nil, fmt.Errorf("error calculating hash for file2: %v", err)
@@ -221,9 +238,11 @@ func (fs *FilesystemHandler) compareBinaryFiles(path1, path2 string) (*FileDiff,
 	}
 
 	if hash1 == hash2 {
+		appendSubOperation(ctx, "compare.binary.equal")
 		diff.Similar = 100.0
 		diff.Unchanged = 1
 	} else {
+		appendSubOperation(ctx, "compare.binary.different")
 		diff.Similar = 0.0
 		diff.Added = []string{"Binary files differ"}
 	}

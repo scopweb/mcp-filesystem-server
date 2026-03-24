@@ -7,7 +7,7 @@ description: Configure MCP Filesystem Server for Claude Desktop.
 
 Add to your `claude_desktop_config.json`:
 
-### Binary
+### Binary (in PATH)
 
 ```json title="claude_desktop_config.json"
 {
@@ -15,6 +15,19 @@ Add to your `claude_desktop_config.json`:
     "filesystem": {
       "command": "mcp-filesystem-server",
       "args": ["/path/to/allowed/dir", "/another/dir"]
+    }
+  }
+}
+```
+
+### Windows — direct path to .exe
+
+```json title="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "C:\\path\\to\\mcp-filesystem-server.exe",
+      "args": ["C:\\Users\\you\\projects", "C:\\another\\dir"]
     }
   }
 }
@@ -44,6 +57,30 @@ Add to your `claude_desktop_config.json`:
 2. The server receives MCP tool calls and executes filesystem operations.
 3. All paths are validated against the allowed directories passed as arguments.
 4. The normalizer layer corrects parameter mismatches before they reach the handler.
+
+## Development logging
+
+If you want local audit logs while testing with Claude Desktop, place flags before the allowed directories:
+
+```json title="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "C:\\path\\to\\mcp-filesystem-server.exe",
+      "args": [
+        "--dev",
+        "--log-dir",
+        "C:\\mcp-logs",
+        "C:\\Users\\you\\projects"
+      ]
+    }
+  }
+}
+```
+
+- `--dev --log-dir C:\\mcp-logs` writes `operations.jsonl` and `metrics.json`.
+- Allowed directories must come after the flags because the server reads them from positional arguments.
+- To inspect logs locally, run `go run ./cmd/logdashboard --log-dir C:\\mcp-logs --addr :8091` and open `http://127.0.0.1:8091`.
 
 :::caution
 Only allow directories you trust. The server has full read/write access within allowed paths.

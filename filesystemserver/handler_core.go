@@ -31,21 +31,21 @@ func (fs *FilesystemHandler) UpdateAllowedDirs(dirs []string) {
 
 // tryFetchRoots asks the client for its roots and merges them into allowedDirs.
 // It only runs once per handler lifetime; subsequent calls are no-ops.
-func (fs *FilesystemHandler) tryFetchRoots(ctx context.Context) {
+func (fs *FilesystemHandler) tryFetchRoots(ctx context.Context) bool {
 	if fs.requestRootsFn == nil {
-		return
+		return false
 	}
 	fs.mu.Lock()
 	if fs.rootsFetched {
 		fs.mu.Unlock()
-		return
+		return false
 	}
 	fs.rootsFetched = true
 	fs.mu.Unlock()
 
 	dirs, err := fs.requestRootsFn(ctx)
 	if err != nil || len(dirs) == 0 {
-		return
+		return false
 	}
 
 	normalized := make([]string, 0, len(dirs))
@@ -64,6 +64,7 @@ func (fs *FilesystemHandler) tryFetchRoots(ctx context.Context) {
 		fs.allowedDirs = append(fs.allowedDirs, normalized...)
 	}
 	fs.mu.Unlock()
+	return true
 }
 
 // NewFilesystemHandler creates a new filesystem handler
@@ -155,6 +156,7 @@ func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 
 // handleReadFile reads file contents, optionally limited to a line range.
 func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "read.parse_arguments")
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
@@ -175,6 +177,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 	lineRangeRequested := startLine > 0 || endLine > 0
 
 	if path == "." || path == "./" {
+		appendSubOperation(ctx, "read.resolve_cwd")
 		cwd, err := os.Getwd()
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -187,6 +190,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		path = cwd
 	}
 
+	appendSubOperation(ctx, "read.validate_path")
 	validPath, err := fs.validatePath(path)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -197,6 +201,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	appendSubOperation(ctx, "read.stat_target")
 	info, err := os.Stat(validPath)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -208,6 +213,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 	}
 
 	if info.IsDir() {
+		appendSubOperation(ctx, "read.return_directory_resource")
 		resourceURI := pathToResourceURI(validPath)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -225,6 +231,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 	}
 
 	if info.Size() > MAX_INLINE_SIZE && !lineRangeRequested {
+		appendSubOperation(ctx, "read.return_large_resource")
 		resourceURI := pathToResourceURI(validPath)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -241,10 +248,12 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	appendSubOperation(ctx, "read.detect_mime")
 	mimeType := detectMimeType(validPath)
 
 	// For text files with a line range: stream with bufio — never loads the full file.
 	if lineRangeRequested && isTextFile(mimeType) {
+		appendSubOperation(ctx, "read.range_open")
 		f, err := os.Open(validPath)
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -262,6 +271,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}
 		actualEnd := endLine // 0 means read to EOF
 
+		appendSubOperation(ctx, "read.range_scan")
 		scanner := bufio.NewScanner(f)
 		buf := make([]byte, 64*1024)
 		scanner.Buffer(buf, 4*1024*1024) // support lines up to 4 MB
@@ -298,6 +308,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 			}, nil
 		}
 		text := fmt.Sprintf("Lines %d-%d:\n%s", actualStart, displayEnd, strings.Join(selected, "\n"))
+		appendSubOperation(ctx, "read.range_return_text")
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: text},
@@ -305,6 +316,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	appendSubOperation(ctx, "read.load_file")
 	content, err := os.ReadFile(validPath)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -316,6 +328,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 	}
 
 	if isTextFile(mimeType) {
+		appendSubOperation(ctx, "read.return_text")
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: string(content)},
@@ -323,6 +336,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	} else if isImageFile(mimeType) {
 		if info.Size() <= MAX_BASE64_SIZE {
+			appendSubOperation(ctx, "read.return_image_base64")
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
 					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Image file: %s (%s, %d bytes)", validPath, mimeType, info.Size())},
@@ -336,6 +350,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}
 	}
 
+	appendSubOperation(ctx, "read.return_binary_resource")
 	resourceURI := pathToResourceURI(validPath)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -354,6 +369,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 
 // handleWriteFile writes content to a file
 func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "write.parse_arguments")
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
 		return nil, fmt.Errorf("path must be a string")
@@ -364,6 +380,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 	}
 
 	if path == "." || path == "./" {
+		appendSubOperation(ctx, "write.resolve_cwd")
 		cwd, err := os.Getwd()
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -376,6 +393,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		path = cwd
 	}
 
+	appendSubOperation(ctx, "write.validate_path")
 	validPath, err := fs.validatePath(path)
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -387,6 +405,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 	}
 
 	if info, err := os.Stat(validPath); err == nil && info.IsDir() {
+		appendSubOperation(ctx, "write.reject_directory_target")
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: "Error: Cannot write to a directory"},
@@ -396,6 +415,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 	}
 
 	parentDir := filepath.Dir(validPath)
+	appendSubOperation(ctx, "write.ensure_parent_dir")
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -405,7 +425,77 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		}, nil
 	}
 
+	// create_backup: copy existing file before overwriting
+	if createBackup, _ := request.GetArguments()["create_backup"].(bool); createBackup {
+		appendSubOperation(ctx, "write.create_backup")
+		if _, statErr := os.Stat(validPath); statErr == nil {
+			if src, err := os.Open(validPath); err == nil {
+				if dst, err := os.Create(validPath + ".backup"); err == nil {
+					io.Copy(dst, src) //nolint
+					dst.Close()
+				}
+				src.Close()
+			}
+		}
+	}
+
+	// chunk_index: streamed chunked write — bypasses atomic write
+	if ci, ok := request.GetArguments()["chunk_index"].(float64); ok {
+		chunkIndex := int(ci)
+		appendSubOperation(ctx, fmt.Sprintf("write.chunk.%d", chunkIndex))
+		var chunkErr error
+		if chunkIndex == 0 {
+			appendSubOperation(ctx, "write.chunk.initial")
+			chunkErr = os.WriteFile(validPath, []byte(content), 0644)
+		} else {
+			appendSubOperation(ctx, "write.chunk.append")
+			f, err := os.OpenFile(validPath, os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error opening file for chunk append: %v", err)},
+					},
+					IsError: true,
+				}, nil
+			}
+			_, chunkErr = f.WriteString(content)
+			f.Close()
+		}
+		if chunkErr != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error writing chunk %d: %v", chunkIndex, chunkErr)},
+				},
+				IsError: true,
+			}, nil
+		}
+		totalChunks := -1
+		if tc, ok := request.GetArguments()["total_chunks"].(float64); ok {
+			totalChunks = int(tc)
+		}
+		if totalChunks > 0 && chunkIndex == totalChunks-1 {
+			appendSubOperation(ctx, "write.chunk.complete")
+			fileInfo, _ := os.Stat(validPath)
+			size := int64(0)
+			if fileInfo != nil {
+				size = fileInfo.Size()
+			}
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("✅ Chunked write complete: %s (%d bytes, %d/%d chunks)", path, size, chunkIndex+1, totalChunks)},
+				},
+			}, nil
+		}
+		appendSubOperation(ctx, "write.chunk.partial")
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("✅ Chunk %d written to %s", chunkIndex, path)},
+			},
+		}, nil
+	}
+
 	// Atomic write: write to temp file in same dir, then rename
+	appendSubOperation(ctx, "write.atomic.temp_file")
 	tmpFile, err := os.CreateTemp(parentDir, ".mcp-write-*.tmp")
 	if err != nil {
 		return &mcp.CallToolResult{
@@ -431,6 +521,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 			IsError: true,
 		}, nil
 	}
+	appendSubOperation(ctx, "write.atomic.rename")
 	if err := os.Rename(tmpPath, validPath); err != nil {
 		os.Remove(tmpPath)
 		return &mcp.CallToolResult{
@@ -441,6 +532,7 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		}, nil
 	}
 
+	appendSubOperation(ctx, "write.stat_result")
 	info, err := os.Stat(validPath)
 	if err != nil {
 		return &mcp.CallToolResult{

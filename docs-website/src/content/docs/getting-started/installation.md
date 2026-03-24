@@ -23,13 +23,23 @@ go install github.com/scopweb/mcp-filesystem-server@latest
 docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 ```
 
-### Build locally
+### Build locally (Linux / macOS)
 
 ```bash
 git clone https://github.com/scopweb/mcp-filesystem-server.git
 cd mcp-filesystem-server
 go build -o mcp-filesystem-server .
 ```
+
+### Build locally (Windows)
+
+```powershell
+git clone https://github.com/scopweb/mcp-filesystem-server.git
+cd mcp-filesystem-server
+go build -ldflags="-s -w" -o mcp-filesystem-server.exe .
+```
+
+The resulting `mcp-filesystem-server.exe` can be placed anywhere and referenced by its full path in `claude_desktop_config.json`.
 
 ## Verify
 

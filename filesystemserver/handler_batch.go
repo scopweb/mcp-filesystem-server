@@ -12,6 +12,7 @@ import (
 
 // handleBatchEdit - Operaciones en lote para múltiples archivos
 func (fs *FilesystemHandler) handleBatchEdit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "batch.validate_request")
 	operationsParam, ok := request.GetArguments()["operations"].([]interface{})
 	if !ok {
 		return &mcp.CallToolResult{
@@ -46,18 +47,22 @@ func (fs *FilesystemHandler) handleBatchEdit(ctx context.Context, request mcp.Ca
 
 	results := []string{}
 	errors := []string{}
+	appendSubOperation(ctx, fmt.Sprintf("batch.operation_count.%d", len(operationsParam)))
 
 	for i, op := range operationsParam {
 		opMap, ok := op.(map[string]interface{})
 		if !ok {
+			appendSubOperation(ctx, fmt.Sprintf("batch.operation.%d.invalid_format", i+1))
 			errors = append(errors, fmt.Sprintf("Operation %d: invalid format", i+1))
 			continue
 		}
 
-		result, err := fs.processBatchOperation(opMap, i+1)
+		result, err := fs.processBatchOperation(ctx, opMap, i+1)
 		if err != nil {
+			appendSubOperation(ctx, fmt.Sprintf("batch.operation.%d.error", i+1))
 			errors = append(errors, fmt.Sprintf("Operation %d: %v", i+1, err))
 		} else {
+			appendSubOperation(ctx, fmt.Sprintf("batch.operation.%d.ok", i+1))
 			results = append(results, result)
 		}
 	}
@@ -89,24 +94,25 @@ func resolveStringField(op map[string]interface{}, keys ...string) (string, bool
 
 // processBatchOperation - Procesa una operación individual del lote.
 // Accepts "action" as alias for "type" (ported from ultra — Claude Desktop convention).
-func (fs *FilesystemHandler) processBatchOperation(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchOperation(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
 	// Accept "type" or "action" for the operation type
 	opType, ok := resolveStringField(operation, "type", "action")
 	if !ok {
 		return "", fmt.Errorf("missing 'type' (or 'action') field")
 	}
+	appendSubOperation(ctx, fmt.Sprintf("batch.operation.%d.type.%s", opNum, strings.ToLower(strings.TrimSpace(opType))))
 
 	switch strings.ToLower(strings.TrimSpace(opType)) {
 	case "rename", "move":
-		return fs.processBatchMove(operation, opNum)
+		return fs.processBatchMove(ctx, operation, opNum)
 	case "copy", "cp":
-		return fs.processBatchCopy(operation, opNum)
+		return fs.processBatchCopy(ctx, operation, opNum)
 	case "delete", "remove", "rm":
-		return fs.processBatchDelete(operation, opNum)
+		return fs.processBatchDelete(ctx, operation, opNum)
 	case "create_dir", "mkdir":
-		return fs.processBatchCreateDir(operation, opNum)
+		return fs.processBatchCreateDir(ctx, operation, opNum)
 	case "write":
-		return fs.processBatchWrite(operation, opNum)
+		return fs.processBatchWrite(ctx, operation, opNum)
 	default:
 		return "", fmt.Errorf("unsupported operation type: '%s' (supported: rename, move, copy, cp, delete, remove, rm, create_dir, mkdir, write)", opType)
 	}
@@ -114,7 +120,8 @@ func (fs *FilesystemHandler) processBatchOperation(operation map[string]interfac
 
 // processBatchMove - Procesa operación de mover/renombrar
 // Accepts: from/source/src/path for origin; to/destination/dest/dst/target for target
-func (fs *FilesystemHandler) processBatchMove(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchMove(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
+	appendSubOperation(ctx, fmt.Sprintf("batch.move.%d.validate", opNum))
 	from, ok := resolveStringField(operation, "from", "source", "src", "path", "file")
 	if !ok {
 		return "", fmt.Errorf("missing 'from' (or 'source') field")
@@ -149,7 +156,8 @@ func (fs *FilesystemHandler) processBatchMove(operation map[string]interface{}, 
 
 // processBatchCopy - Procesa operación de copiar
 // Accepts: from/source/src for origin; to/destination/dest/dst/target for target
-func (fs *FilesystemHandler) processBatchCopy(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchCopy(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
+	appendSubOperation(ctx, fmt.Sprintf("batch.copy.%d.validate", opNum))
 	from, ok := resolveStringField(operation, "from", "source", "src", "path", "file")
 	if !ok {
 		return "", fmt.Errorf("missing 'from' (or 'source') field")
@@ -184,7 +192,8 @@ func (fs *FilesystemHandler) processBatchCopy(operation map[string]interface{}, 
 
 // processBatchDelete - Procesa operación de eliminar
 // Accepts: path/from/source/src/file for the target path
-func (fs *FilesystemHandler) processBatchDelete(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchDelete(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
+	appendSubOperation(ctx, fmt.Sprintf("batch.delete.%d.validate", opNum))
 	path, ok := resolveStringField(operation, "path", "from", "source", "src", "file")
 	if !ok {
 		return "", fmt.Errorf("missing 'path' (or 'from' or 'source') field")
@@ -222,7 +231,8 @@ func (fs *FilesystemHandler) processBatchDelete(operation map[string]interface{}
 
 // processBatchCreateDir - Procesa operación de crear directorio
 // Accepts: path/from/target/destination for the directory path
-func (fs *FilesystemHandler) processBatchCreateDir(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchCreateDir(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
+	appendSubOperation(ctx, fmt.Sprintf("batch.mkdir.%d.validate", opNum))
 	path, ok := resolveStringField(operation, "path", "from", "target", "destination")
 	if !ok {
 		return "", fmt.Errorf("missing 'path' field")
@@ -241,7 +251,8 @@ func (fs *FilesystemHandler) processBatchCreateDir(operation map[string]interfac
 }
 
 // processBatchWrite - Procesa operación de escribir archivo
-func (fs *FilesystemHandler) processBatchWrite(operation map[string]interface{}, opNum int) (string, error) {
+func (fs *FilesystemHandler) processBatchWrite(ctx context.Context, operation map[string]interface{}, opNum int) (string, error) {
+	appendSubOperation(ctx, fmt.Sprintf("batch.write.%d.validate", opNum))
 	path, ok := operation["path"].(string)
 	if !ok {
 		return "", fmt.Errorf("missing 'path' field")

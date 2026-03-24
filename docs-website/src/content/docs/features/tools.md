@@ -1,6 +1,6 @@
 ---
 title: Tools Reference
-description: All 29 tools available in MCP Filesystem Server.
+description: All 18 tools available in MCP Filesystem Server.
 ---
 
 ## File Operations
@@ -21,12 +21,15 @@ When `start_line`/`end_line` are set, the 5 MB inline limit is bypassed — idea
 
 ### `write_file`
 
-Create or overwrite a file with new content.
+Create or overwrite a file with new content. Supports optional backup and chunked streaming for large files.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | Yes | Path where to write |
 | `content` | string | Yes | Content to write |
+| `create_backup` | boolean | No | Create a `.backup` copy before overwriting (default: false) |
+| `chunk_index` | number | No | 0-based chunk index for streaming large files. Omit for single write. |
+| `total_chunks` | number | No | Total chunks expected. Required when `chunk_index` is set. |
 
 ### `edit_file`
 
@@ -128,48 +131,26 @@ Returns the list of directories the server is allowed to access. No parameters.
 
 ## Search
 
-### `search_files`
+### `search`
 
-Recursively search for files matching a name pattern.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | Starting directory |
-| `pattern` | string | Yes | Name pattern to match |
-
-### `smart_search`
-
-Intelligent search with regex, content matching, and file type filtering.
+Unified file search with three modes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | Yes | Starting directory |
-| `pattern` | string | Yes | Search pattern (regex supported) |
-| `include_content` | boolean | No | Search inside files (default: false) |
-| `file_types` | array | No | Filter by extension (e.g., `[".js", ".go"]`) |
-| `context_lines` | number | No | Lines before/after each content match, like `grep -C N` (default: 0) |
+| `mode` | string | No | `"files"` (default), `"content"`, or `"duplicates"` |
+| `pattern` | string | Conditional | Filename glob or content regex. Required for `files` and `content` modes. |
+| `include_content` | boolean | No | (content mode) Search inside files. Default: true. |
+| `file_types` | array | No | (content mode) Filter by extension, e.g. `[".go", ".js"]` |
+| `context_lines` | number | No | (content mode) Lines before/after each match, like `grep -C N`. Default: 0. |
 
 :::tip
-Set `context_lines: 3` with `include_content: true` to see matches with surrounding code — avoids a separate `read_file` call to understand the context.
+- `mode: "files"` with a glob pattern like `*.go` replaces the old `search_files` tool.
+- `mode: "content"` with `context_lines: 3` shows surrounding code — avoids a separate `read_file` call.
+- `mode: "duplicates"` scans by MD5 hash — replaces the old `find_duplicates` tool.
 :::
 
-### `find_duplicates`
-
-Find duplicate files by content hash.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | Directory to scan |
-
 ## Analysis
-
-### `analyze_file`
-
-Deep analysis of a single file — complexity, dependencies, metadata.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | File to analyze |
 
 ### `analyze_project`
 
@@ -189,26 +170,6 @@ Diff-style comparison between two files.
 | `file2` | string | Yes | Second file |
 | `format` | string | No | `unified`, `context`, or `side-by-side` (default: unified) |
 
-### `performance_analysis`
-
-Benchmark filesystem performance on a path.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | Path to analyze |
-| `operation` | string | No | `read`, `write`, `list`, or all (default: all) |
-
-### `generate_report`
-
-Generate reports in JSON, HTML, or Markdown.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | Path to analyze |
-| `format` | string | No | `json`, `html`, `markdown` (default: json) |
-| `output` | string | No | Output file path |
-| `sections` | array | No | Sections: `overview`, `files`, `quality`, `dependencies`, `security` |
-
 ## Batch & Advanced
 
 ### `batch_operations`
@@ -223,28 +184,6 @@ Supported types: `rename`, `delete`, `copy`, `cp`, `rm`, `remove`.
 
 Field aliases: `source`/`src`/`from`/`path`/`file` for source, `destination`/`dest`/`dst`/`to`/`target` for destination, `action`/`type` for operation type.
 
-### `smart_sync`
-
-Directory synchronization with conflict detection.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `source` | string | Yes | Source directory |
-| `target` | string | Yes | Target directory |
-| `mode` | string | No | `preview`, `merge`, `overwrite` (default: preview) |
-| `exclude_patterns` | array | No | Patterns to exclude |
-
-### `assist_refactor`
-
-Analyze dependencies and suggest safe refactoring changes.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | File or directory |
-| `operation` | string | Yes | `rename`, `extract`, `inline`, `move` |
-| `target` | string | No | Target name |
-| `options` | object | No | Additional options |
-
 ### `plan_task`
 
 Create step-by-step execution plans for complex operations.
@@ -254,44 +193,3 @@ Create step-by-step execution plans for complex operations.
 | `description` | string | Yes | Task description |
 | `target_files` | array | No | Files to modify |
 | `workspace` | string | No | Workspace path |
-
-## Large File Operations
-
-### `chunked_write`
-
-Write large files in chunks to avoid memory limits.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | File path |
-| `content` | string | Yes | Content chunk |
-| `chunk_index` | number | Yes | Chunk index (0-based) |
-| `total_chunks` | number | Yes | Total chunks |
-
-### `split_file`
-
-Split a large file into smaller chunks.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | File to split |
-| `chunk_size` | number | No | Chunk size in bytes (default: 1MB) |
-
-### `join_files`
-
-Join file chunks into a single file.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `target_path` | string | Yes | Output file path |
-| `source_files` | array | Yes | List of chunk files |
-
-### `write_file_safe`
-
-Atomic file write with optional backup.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | Yes | File path |
-| `content` | string | Yes | Content to write |
-| `create_backup` | boolean | No | Create backup first (default: false) |

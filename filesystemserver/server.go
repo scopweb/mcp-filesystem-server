@@ -2,19 +2,74 @@ package filesystemserver
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "0.6.4"
+var Version = "1.0.0"
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
+	s, _, err := NewFilesystemServerWithOptions(allowedDirs)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+type ServerOption func(*serverOptions)
+
+type serverOptions struct {
+	auditLogDir string
+}
+
+type multiCloser struct {
+	closers []io.Closer
+}
+
+func (m multiCloser) Close() error {
+	var firstErr error
+	for _, closer := range m.closers {
+		if closer == nil {
+			continue
+		}
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func WithDevelopmentAuditLogging(logDir string) ServerOption {
+	return func(opts *serverOptions) {
+		opts.auditLogDir = strings.TrimSpace(logDir)
+	}
+}
+
+func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOption) (*server.MCPServer, io.Closer, error) {
+	var opts serverOptions
+	for _, option := range options {
+		if option != nil {
+			option(&opts)
+		}
+	}
 
 	h, err := NewFilesystemHandler(allowedDirs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	closers := make([]io.Closer, 0, 1)
+	if opts.auditLogDir != "" {
+		logger, err := NewAuditLogger(opts.auditLogDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
+		}
+		h.SetAuditLogger(logger)
+		closers = append(closers, logger)
 	}
 
 	s := server.NewMCPServer(
@@ -43,7 +98,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		"file://",
 		"File System",
 		mcp.WithResourceDescription("Access to files and directories on the local file system"),
-	), h.handleReadResource)
+	), h.withResourceAudit(h.handleReadResource))
 
 	// Register tool handlers — each wrapped with withNormalize for parameter
 	// aliasing, type coercion, and JSON flexibility (ported from ultra).
@@ -66,7 +121,7 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 
 	s.AddTool(mcp.NewTool(
 		"write_file",
-		mcp.WithDescription("Create a new file or overwrite an existing file with new content."),
+		mcp.WithDescription("Create a new file or overwrite an existing file with new content. Supports optional backup and chunked streaming for large files."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path",
@@ -77,29 +132,38 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 			mcp.Description("Content to write to the file"),
 			mcp.Required(),
 		),
+		mcp.WithBoolean("create_backup",
+			mcp.Description("Create a .backup copy of the existing file before writing. Default: false."),
+		),
+		mcp.WithNumber("chunk_index",
+			mcp.Description("0-based chunk index for streaming large files. Omit for a single write."),
+		),
+		mcp.WithNumber("total_chunks",
+			mcp.Description("Total number of chunks expected. Required when chunk_index is set."),
+		),
 	), h.withNormalize("write_file", h.handleWriteFile))
 
 	s.AddTool(mcp.NewTool(
-		"list_directory",
-		mcp.WithDescription("List immediate contents of a single directory (one level, no recursion). Prefer this over tree or search_files when you only need what is directly inside a folder — faster and token-efficient."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path of the directory to list"),
-			mcp.Required(),
-		),
-	), h.withNormalize("list_directory", h.handleListDirectory))
-
-	s.AddTool(mcp.NewTool(
-		"create_directory",
-		mcp.WithDescription("Create a new directory or ensure a directory exists."),
+		"edit_file",
+		mcp.WithDescription("Modify file content by replacing specific text without rewriting the entire file."),
 		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path",
-			mcp.Description("Path of the directory to create"),
+			mcp.Description("Path to the file to edit"),
 			mcp.Required(),
 		),
-	), h.withNormalize("create_directory", h.handleCreateDirectory))
+		mcp.WithString("old_text",
+			mcp.Description("Text to be replaced"),
+			mcp.Required(),
+		),
+		mcp.WithString("new_text",
+			mcp.Description("New text to replace with"),
+			mcp.Required(),
+		),
+		mcp.WithBoolean("dry_run",
+			mcp.Description("Preview changes without writing (returns unified diff)"),
+		),
+	), h.withNormalize("edit_file", h.handleEditFile))
 
 	s.AddTool(mcp.NewTool(
 		"copy_file",
@@ -132,48 +196,40 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	), h.withNormalize("move_file", h.handleMoveFile))
 
 	s.AddTool(mcp.NewTool(
-		"search_files",
-		mcp.WithDescription("Recursively search for files and directories matching a pattern."),
+		"delete_file",
+		mcp.WithDescription("Delete a file or directory from the file system."),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithString("path",
+			mcp.Description("Path to the file or directory to delete"),
+			mcp.Required(),
+		),
+		mcp.WithBoolean("recursive",
+			mcp.Description("Whether to recursively delete directories (default: false)"),
+		),
+	), h.withNormalize("delete_file", h.handleDeleteFile))
+
+	s.AddTool(mcp.NewTool(
+		"list_directory",
+		mcp.WithDescription("List immediate contents of a single directory (one level, no recursion). Prefer this over tree or search when you only need what is directly inside a folder — faster and token-efficient."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
-			mcp.Description("Starting path for the search"),
+			mcp.Description("Path of the directory to list"),
 			mcp.Required(),
 		),
-		mcp.WithString("pattern",
-			mcp.Description("Search pattern to match against file names"),
-			mcp.Required(),
-		),
-	), h.withNormalize("search_files", h.handleSearchFiles))
+	), h.withNormalize("list_directory", h.handleListDirectory))
 
 	s.AddTool(mcp.NewTool(
-		"get_file_info",
-		mcp.WithDescription("Retrieve detailed metadata about a file or directory."),
-		mcp.WithReadOnlyHintAnnotation(true),
+		"create_directory",
+		mcp.WithDescription("Create a new directory or ensure a directory exists."),
+		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
-			mcp.Description("Path to the file or directory"),
+			mcp.Description("Path of the directory to create"),
 			mcp.Required(),
 		),
-	), h.withNormalize("get_file_info", h.handleGetFileInfo))
-
-	s.AddTool(mcp.NewTool(
-		"list_allowed_directories",
-		mcp.WithDescription("Returns the list of directories that this server is allowed to access."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-	), h.handleListAllowedDirectories)
-
-	s.AddTool(mcp.NewTool(
-		"read_multiple_files",
-		mcp.WithDescription("Read the contents of multiple files in a single operation."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithArray("paths",
-			mcp.Description("List of file paths to read"),
-			mcp.Required(),
-		),
-	), h.withNormalize("read_multiple_files", h.handleReadMultipleFiles))
+	), h.withNormalize("create_directory", h.handleCreateDirectory))
 
 	s.AddTool(mcp.NewTool(
 		"tree",
@@ -193,90 +249,74 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	), h.withNormalize("tree", h.handleTree))
 
 	s.AddTool(mcp.NewTool(
-		"delete_file",
-		mcp.WithDescription("Delete a file or directory from the file system."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("path",
-			mcp.Description("Path to the file or directory to delete"),
-			mcp.Required(),
-		),
-		mcp.WithBoolean("recursive",
-			mcp.Description("Whether to recursively delete directories (default: false)"),
-		),
-	), h.withNormalize("delete_file", h.handleDeleteFile))
-
-	s.AddTool(mcp.NewTool(
-		"edit_file",
-		mcp.WithDescription("Modify file content by replacing specific text without rewriting the entire file."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("path",
-			mcp.Description("Path to the file to edit"),
-			mcp.Required(),
-		),
-		mcp.WithString("old_text",
-			mcp.Description("Text to be replaced"),
-			mcp.Required(),
-		),
-		mcp.WithString("new_text",
-			mcp.Description("New text to replace with"),
-			mcp.Required(),
-		),
-		mcp.WithBoolean("dry_run",
-			mcp.Description("Preview changes without writing (returns unified diff)"),
-		),
-	), h.withNormalize("edit_file", h.handleEditFile))
-
-	s.AddTool(mcp.NewTool(
-		"analyze_file",
-		mcp.WithDescription("Perform deep analysis of a file including complexity metrics, dependencies, and metadata optimized for Claude Desktop."),
+		"search",
+		mcp.WithDescription("Unified file search. mode=files: find by name/glob pattern; mode=content: regex search inside file contents with optional context lines (like grep -C N); mode=duplicates: find duplicate files by content hash."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
-			mcp.Description("Path to the file to analyze"),
+			mcp.Description("Starting directory for the search"),
 			mcp.Required(),
 		),
-	), h.withNormalize("analyze_file", h.handleAnalyzeFile))
-
-	s.AddTool(mcp.NewTool(
-		"smart_search",
-		mcp.WithDescription("Intelligent search with regex support, content matching, and file type filtering - perfect for Claude's code analysis."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Starting path for the search"),
-			mcp.Required(),
+		mcp.WithString("mode",
+			mcp.Description("Search mode: 'files' (default), 'content', or 'duplicates'"),
 		),
 		mcp.WithString("pattern",
-			mcp.Description("Search pattern (supports regex)"),
-			mcp.Required(),
+			mcp.Description("Filename glob or content regex. Required for files and content modes."),
 		),
 		mcp.WithBoolean("include_content",
-			mcp.Description("Search within file contents (default: false)"),
+			mcp.Description("(content mode) Search within file contents. Default: true."),
 		),
 		mcp.WithArray("file_types",
-			mcp.Description("Filter by file extensions (e.g., ['.js', '.py', '.go'])"),
+			mcp.Description("(content mode) Filter by extension, e.g. ['.go', '.js']"),
 		),
 		mcp.WithNumber("context_lines",
-			mcp.Description("Number of lines to show before and after each content match (like grep -C N). Default: 0."),
+			mcp.Description("(content mode) Lines before/after each match, like grep -C N. Default: 0."),
 		),
-	), h.withNormalize("smart_search", h.handleSmartSearch))
+	), h.withNormalize("search", h.handleSearch))
 
 	s.AddTool(mcp.NewTool(
-		"find_duplicates",
-		mcp.WithDescription("Find duplicate files by content hash - useful for cleanup and optimization tasks Claude might suggest."),
+		"get_file_info",
+		mcp.WithDescription("Retrieve detailed metadata about a file or directory."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
-			mcp.Description("Directory to scan for duplicates"),
+			mcp.Description("Path to the file or directory"),
 			mcp.Required(),
 		),
-	), h.withNormalize("find_duplicates", h.handleFindDuplicates))
+	), h.withNormalize("get_file_info", h.handleGetFileInfo))
+
+	s.AddTool(mcp.NewTool(
+		"list_allowed_directories",
+		mcp.WithDescription("Returns the list of directories that this server is allowed to access."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+	), h.withAudit("list_allowed_directories", h.handleListAllowedDirectories))
+
+	s.AddTool(mcp.NewTool(
+		"read_multiple_files",
+		mcp.WithDescription("Read the contents of multiple files in a single operation."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithArray("paths",
+			mcp.Description("List of file paths to read"),
+			mcp.Required(),
+		),
+	), h.withNormalize("read_multiple_files", h.handleReadMultipleFiles))
+
+	s.AddTool(mcp.NewTool(
+		"read_media_file",
+		mcp.WithDescription("Read a media file (image or binary) returning base64 content or ImageContent for visual files."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithString("path",
+			mcp.Description("Path to the media file"),
+			mcp.Required(),
+		),
+	), h.withNormalize("read_media_file", h.handleReadMediaFile))
 
 	s.AddTool(mcp.NewTool(
 		"analyze_project",
-		mcp.WithDescription("Comprehensive project structure analysis with language detection and metrics - gives Claude full project context."),
+		mcp.WithDescription("Comprehensive project structure analysis with language detection and metrics — gives Claude full project context."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -286,19 +326,8 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	), h.withNormalize("analyze_project", h.handleAnalyzeProject))
 
 	s.AddTool(mcp.NewTool(
-		"batch_operations",
-		mcp.WithDescription("Execute multiple file operations in a single call - efficient for Claude's bulk suggestions."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithArray("operations",
-			mcp.Description("Array of operations to execute: [{type: 'rename|delete|copy', from: 'path', to: 'path'}]"),
-			mcp.Required(),
-		),
-	), h.withNormalize("batch_operations", h.handleBatchEdit))
-
-	s.AddTool(mcp.NewTool(
 		"compare_files",
-		mcp.WithDescription("Advanced file comparison with diff generation and similarity analysis for Claude's code review tasks."),
+		mcp.WithDescription("File comparison with diff generation and similarity analysis."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("file1",
@@ -315,80 +344,15 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	), h.withNormalize("compare_files", h.handleCompareFiles))
 
 	s.AddTool(mcp.NewTool(
-		"performance_analysis",
-		mcp.WithDescription("Analyze file system performance metrics and identify bottlenecks."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path to analyze"),
-			mcp.Required(),
-		),
-		mcp.WithString("operation",
-			mcp.Description("Operation to benchmark: 'read', 'write', 'list' (default: all)"),
-		),
-	), h.withNormalize("performance_analysis", h.handlePerformanceAnalysis))
-
-	s.AddTool(mcp.NewTool(
-		"generate_report",
-		mcp.WithDescription("Generate comprehensive reports in various formats (JSON, HTML, Markdown) for Claude's analysis."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path to analyze for report"),
-			mcp.Required(),
-		),
-		mcp.WithString("format",
-			mcp.Description("Report format: 'json', 'html', 'markdown' (default: json)"),
-		),
-		mcp.WithString("output",
-			mcp.Description("Output file path (optional)"),
-		),
-		mcp.WithArray("sections",
-			mcp.Description("Report sections to include: ['overview', 'files', 'quality', 'dependencies', 'security']"),
-		),
-	), h.withNormalize("generate_report", h.handleGenerateReport))
-
-	s.AddTool(mcp.NewTool(
-		"smart_sync",
-		mcp.WithDescription("Intelligent file synchronization with conflict detection and resolution suggestions."),
+		"batch_operations",
+		mcp.WithDescription("Execute multiple file operations in a single call — efficient for bulk changes."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("source",
-			mcp.Description("Source directory"),
+		mcp.WithArray("operations",
+			mcp.Description("Array of operations: [{type: 'rename|delete|copy', from: 'path', to: 'path'}]"),
 			mcp.Required(),
 		),
-		mcp.WithString("target",
-			mcp.Description("Target directory"),
-			mcp.Required(),
-		),
-		mcp.WithString("mode",
-			mcp.Description("Sync mode: 'preview', 'merge', 'overwrite' (default: preview)"),
-		),
-		mcp.WithArray("exclude_patterns",
-			mcp.Description("Patterns to exclude from sync"),
-		),
-	), h.withNormalize("smart_sync", h.handleSmartSync))
-
-	s.AddTool(mcp.NewTool(
-		"assist_refactor",
-		mcp.WithDescription("Assist with code refactoring by analyzing dependencies and suggesting safe changes."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("path",
-			mcp.Description("File or directory to refactor"),
-			mcp.Required(),
-		),
-		mcp.WithString("operation",
-			mcp.Description("Refactor operation: 'rename', 'extract', 'inline', 'move'"),
-			mcp.Required(),
-		),
-		mcp.WithString("target",
-			mcp.Description("Target for refactoring (new name, extracted function name, etc.)"),
-		),
-		mcp.WithObject("options",
-			mcp.Description("Refactoring options"),
-		),
-	), h.withNormalize("assist_refactor", h.handleAssistRefactor))
+	), h.withNormalize("batch_operations", h.handleBatchEdit))
 
 	s.AddTool(mcp.NewTool(
 		"plan_task",
@@ -407,87 +371,5 @@ func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 		),
 	), h.withNormalize("plan_task", h.handlePlanTask))
 
-	// ARCHIVOS FRAGMENTADOS - Chunked Operations
-	s.AddTool(mcp.NewTool(
-		"chunked_write",
-		mcp.WithDescription("Write large files in chunks to avoid memory limits."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("path",
-			mcp.Description("Path to write the file"),
-			mcp.Required(),
-		),
-		mcp.WithString("content",
-			mcp.Description("Content chunk to write"),
-			mcp.Required(),
-		),
-		mcp.WithNumber("chunk_index",
-			mcp.Description("Current chunk index (0-based)"),
-			mcp.Required(),
-		),
-		mcp.WithNumber("total_chunks",
-			mcp.Description("Total number of chunks"),
-			mcp.Required(),
-		),
-	), h.withNormalize("chunked_write", h.handleChunkedWrite))
-
-	s.AddTool(mcp.NewTool(
-		"split_file",
-		mcp.WithDescription("Split large file into smaller chunks."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path to file to split"),
-			mcp.Required(),
-		),
-		mcp.WithNumber("chunk_size",
-			mcp.Description("Size of each chunk in bytes (default: 1MB)"),
-		),
-	), h.withNormalize("split_file", h.handleSplitFile))
-
-	s.AddTool(mcp.NewTool(
-		"join_files",
-		mcp.WithDescription("Join multiple file chunks into single file."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("target_path",
-			mcp.Description("Path for the joined file"),
-			mcp.Required(),
-		),
-		mcp.WithArray("source_files",
-			mcp.Description("List of chunk files to join"),
-			mcp.Required(),
-		),
-	), h.withNormalize("join_files", h.handleJoinFiles))
-
-	s.AddTool(mcp.NewTool(
-		"write_file_safe",
-		mcp.WithDescription("Safe file write with atomic operation and optional backup."),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithString("path",
-			mcp.Description("Path to write the file"),
-			mcp.Required(),
-		),
-		mcp.WithString("content",
-			mcp.Description("Content to write"),
-			mcp.Required(),
-		),
-		mcp.WithBoolean("create_backup",
-			mcp.Description("Create backup before writing (default: false)"),
-		),
-	), h.withNormalize("write_file_safe", h.handleWriteFileSafe))
-
-	s.AddTool(mcp.NewTool(
-		"read_media_file",
-		mcp.WithDescription("Read a media file (image or binary) returning base64 content or ImageContent for visual files."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path to the media file"),
-			mcp.Required(),
-		),
-	), h.withNormalize("read_media_file", h.handleReadMediaFile))
-
-	return s, nil
+	return s, multiCloser{closers: closers}, nil
 }

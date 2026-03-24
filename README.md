@@ -46,13 +46,13 @@ docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 
 ## Tools
 
-**File operations**: `read_file` (supports `start_line`/`end_line`), `write_file`, `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
+**File operations**: `read_file` (supports `start_line`/`end_line`), `write_file` (supports `create_backup`, `chunk_index`/`total_chunks`), `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
 
-**Analysis**: `analyze_file`, `analyze_project`, `smart_search` (supports `context_lines`), `find_duplicates`, `compare_files`, `performance_analysis`, `generate_report`
+**Search**: `search` — unified: `mode: "files"` (glob/substring), `mode: "content"` (regex + `context_lines`), `mode: "duplicates"` (MD5 hash scan)
 
-**Batch & advanced**: `batch_operations`, `assist_refactor`, `plan_task`, `smart_sync`
+**Analysis**: `analyze_project`, `compare_files`
 
-**Large files**: `chunked_write`, `split_file`, `join_files`, `write_file_safe`
+**Batch & advanced**: `batch_operations`, `plan_task`
 
 **Media**: `read_media_file` — reads images as `ImageContent`, other binary files as base64 text with MIME type
 
@@ -76,7 +76,7 @@ All paths validated against an allow-list. Symlinks resolved and re-checked. Pat
 
 | | This server | [ultra](https://github.com/scopweb/mcp-filesystem-go-ultra) |
 |---|---|---|
-| Tools | 29 | 16 (consolidated) |
+| Tools | 18 | 16 (consolidated) |
 | Normalizer | Yes (ported) | Yes (original) |
 | Backup/restore | No | Yes |
 | Pipeline executor | No | Yes |

@@ -2,6 +2,39 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Development audit logging** — new `--dev --log-dir <dir>` mode writes `operations.jsonl` and `metrics.json` for local observability without affecting normal stdio MCP transport.
+- **Log inspection tools** — new `cmd/logview`, `cmd/logdashboard`, shared `internal/logview`, and `internal/dashboardapi` make it easier to inspect recent operations, errors, timings, request parameters, and internal sub-operations.
+- **Optional proxy correlation** — new `cmd/proxy` can inject and persist correlated `request_id` traces in `proxy.jsonl` for end-to-end debugging.
+
+### Changed
+- Development logging now records both raw and normalized tool arguments, plus internal action summaries and sub-operation traces, so Claude/Desktop requests can be audited more precisely.
+
+## [1.0.0] - 2026-03-23
+
+### Added
+- **`search` tool** — unified search replacing `search_files`, `smart_search`, and `find_duplicates`. Use `mode: "files"` (glob/substring), `mode: "content"` (regex + `context_lines`), or `mode: "duplicates"` (MD5 hash scan).
+- **`write_file` backup** — new optional `create_backup` boolean param. Creates a `.backup` copy of the existing file before overwriting.
+- **`write_file` chunked streaming** — new optional `chunk_index` / `total_chunks` params. Replaces `chunked_write`: send chunks sequentially; first chunk (index 0) truncates the file, subsequent chunks append.
+
+### Removed (breaking)
+- `search_files` → use `search` with `mode: "files"`
+- `smart_search` → use `search` with `mode: "content"`
+- `find_duplicates` → use `search` with `mode: "duplicates"`
+- `write_file_safe` → use `write_file` with `create_backup: true`
+- `chunked_write` → use `write_file` with `chunk_index` + `total_chunks`
+- `split_file` — removed (no direct replacement)
+- `join_files` — removed (no direct replacement)
+- `analyze_file` — removed (was stub, never implemented)
+- `performance_analysis` — removed (was stub, never implemented)
+- `generate_report` — removed (was stub, never implemented)
+- `smart_sync` — removed (was stub, never implemented)
+- `assist_refactor` — removed (was stub, never implemented)
+
+---
+
 ## [0.6.4] - 2026-03-23
 
 ### Fixed

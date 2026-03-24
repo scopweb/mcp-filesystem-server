@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -74,16 +76,14 @@ func builtInRules() []NormalizationRule {
 	// Tools that accept a "path" parameter
 	pathTools := []string{
 		"read_file", "write_file", "list_directory", "get_file_info",
-		"create_directory", "delete_file", "search_files", "analyze_file",
-		"tree", "find_duplicates", "analyze_project",
-		"performance_analysis", "smart_search", "generate_report",
-		"chunked_write", "split_file", "write_file_safe",
+		"create_directory", "delete_file", "search",
+		"tree", "analyze_project",
 	}
 
 	// Tools that accept a "path" for directories
 	dirTools := []string{
 		"list_directory", "create_directory", "tree",
-		"find_duplicates", "analyze_project",
+		"search", "analyze_project",
 	}
 
 	return []NormalizationRule{
@@ -108,9 +108,9 @@ func builtInRules() []NormalizationRule {
 		{ID: "global-dir", Tools: dirTools, Type: RuleParamAlias, From: "dir", To: "path"},
 		{ID: "global-folder", Tools: dirTools, Type: RuleParamAlias, From: "folder", To: "path"},
 
-		// write_file / write_file_safe: accept text / data as alias for content
-		{ID: "write-text", Tools: []string{"write_file", "write_file_safe", "chunked_write"}, Type: RuleParamAlias, From: "text", To: "content"},
-		{ID: "write-data", Tools: []string{"write_file", "write_file_safe", "chunked_write"}, Type: RuleParamAlias, From: "data", To: "content"},
+		// write_file: accept text / data as alias for content
+		{ID: "write-text", Tools: []string{"write_file"}, Type: RuleParamAlias, From: "text", To: "content"},
+		{ID: "write-data", Tools: []string{"write_file"}, Type: RuleParamAlias, From: "data", To: "content"},
 
 		// copy_file / move_file: src/dst/from/to → source/destination
 		{ID: "copy-src", Tools: []string{"copy_file", "move_file"}, Type: RuleParamAlias, From: "src", To: "source"},
@@ -119,12 +119,6 @@ func builtInRules() []NormalizationRule {
 		{ID: "copy-dest", Tools: []string{"copy_file", "move_file"}, Type: RuleParamAlias, From: "dest", To: "destination"},
 		{ID: "copy-to", Tools: []string{"copy_file", "move_file"}, Type: RuleParamAlias, From: "to", To: "destination"},
 		{ID: "copy-target", Tools: []string{"copy_file", "move_file"}, Type: RuleParamAlias, From: "target", To: "destination"},
-
-		// smart_sync: src/dst → source/target
-		{ID: "sync-src", Tools: []string{"smart_sync"}, Type: RuleParamAlias, From: "src", To: "source"},
-		{ID: "sync-dst", Tools: []string{"smart_sync"}, Type: RuleParamAlias, From: "dst", To: "target"},
-		{ID: "sync-dest", Tools: []string{"smart_sync"}, Type: RuleParamAlias, From: "dest", To: "target"},
-		{ID: "sync-destination", Tools: []string{"smart_sync"}, Type: RuleParamAlias, From: "destination", To: "target"},
 
 		// compare_files: source/target/path1/path2 → file1/file2
 		{ID: "compare-source", Tools: []string{"compare_files"}, Type: RuleParamAlias, From: "source", To: "file1"},
@@ -135,18 +129,10 @@ func builtInRules() []NormalizationRule {
 		// read_multiple_files: accept "files" as alias for "paths"
 		{ID: "multi-files", Tools: []string{"read_multiple_files"}, Type: RuleParamAlias, From: "files", To: "paths"},
 
-		// search_files / smart_search: accept "query" / "regex" / "search" as alias for "pattern"
-		{ID: "search-query", Tools: []string{"search_files", "smart_search"}, Type: RuleParamAlias, From: "query", To: "pattern"},
-		{ID: "search-regex", Tools: []string{"search_files", "smart_search"}, Type: RuleParamAlias, From: "regex", To: "pattern"},
-		{ID: "search-search", Tools: []string{"search_files", "smart_search"}, Type: RuleParamAlias, From: "search", To: "pattern"},
-
-		// join_files: accept "output" / "path" as alias for "target_path"
-		{ID: "join-output", Tools: []string{"join_files"}, Type: RuleParamAlias, From: "output", To: "target_path"},
-		{ID: "join-path", Tools: []string{"join_files"}, Type: RuleParamAlias, From: "path", To: "target_path"},
-		// join_files: accept "files" / "chunks" / "paths" as alias for "source_files"
-		{ID: "join-files", Tools: []string{"join_files"}, Type: RuleParamAlias, From: "files", To: "source_files"},
-		{ID: "join-chunks", Tools: []string{"join_files"}, Type: RuleParamAlias, From: "chunks", To: "source_files"},
-		{ID: "join-paths", Tools: []string{"join_files"}, Type: RuleParamAlias, From: "paths", To: "source_files"},
+		// search: accept "query" / "regex" as alias for "pattern"; "type" as alias for "mode"
+		{ID: "search-query", Tools: []string{"search"}, Type: RuleParamAlias, From: "query", To: "pattern"},
+		{ID: "search-regex", Tools: []string{"search"}, Type: RuleParamAlias, From: "regex", To: "pattern"},
+		{ID: "search-type", Tools: []string{"search"}, Type: RuleParamAlias, From: "type", To: "mode"},
 
 		// plan_task: accept "task" as alias for "description"
 		{ID: "plan-task", Tools: []string{"plan_task"}, Type: RuleParamAlias, From: "task", To: "description"},
@@ -168,11 +154,8 @@ func builtInRules() []NormalizationRule {
 		// ── JSON accept-both ────────────────────────────────────────────
 		{ID: "paths-json", Tools: []string{"read_multiple_files"}, Type: RuleJSONAcceptAny, From: "paths"},
 		{ID: "operations-json", Tools: []string{"batch_operations"}, Type: RuleJSONAcceptAny, From: "operations"},
-		{ID: "file_types-json", Tools: []string{"smart_search"}, Type: RuleJSONAcceptAny, From: "file_types"},
-		{ID: "sections-json", Tools: []string{"generate_report"}, Type: RuleJSONAcceptAny, From: "sections"},
-		{ID: "exclude-json", Tools: []string{"smart_sync"}, Type: RuleJSONAcceptAny, From: "exclude_patterns"},
+		{ID: "file_types-json", Tools: []string{"search"}, Type: RuleJSONAcceptAny, From: "file_types"},
 		{ID: "target_files-json", Tools: []string{"plan_task"}, Type: RuleJSONAcceptAny, From: "target_files"},
-		{ID: "source_files-json", Tools: []string{"join_files"}, Type: RuleJSONAcceptAny, From: "source_files"},
 	}
 }
 
@@ -360,10 +343,22 @@ func FixLiteralEscapes(s string) string {
 func (fs *FilesystemHandler) withNormalize(tool string, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
 	normalizer := NewNormalizer()
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		fs.tryFetchRoots(ctx)
+		ctx = withAuditContext(ctx, extractRequestIDFromToolRequest(request))
+		start := time.Now().UTC()
+		rootsFetched := fs.tryFetchRoots(ctx)
+		if rootsFetched {
+			appendSubOperation(ctx, "roots_sync")
+		}
+		rawArgs := summarizeArguments(request.GetArguments())
 		if args := request.GetArguments(); args != nil {
 			normalizer.Normalize(tool, args)
 		}
-		return handler(ctx, request)
+		normalizedArgs := summarizeArguments(request.GetArguments())
+		if !reflect.DeepEqual(rawArgs, normalizedArgs) {
+			appendSubOperation(ctx, "normalize_arguments")
+		}
+		result, err := handler(ctx, request)
+		fs.logToolCall(ctx, start, tool, rawArgs, normalizedArgs, buildInternalAction(rootsFetched, rawArgs, normalizedArgs), result, err)
+		return result, err
 	}
 }

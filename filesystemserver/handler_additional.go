@@ -11,101 +11,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// handleSearchFiles searches for files matching a pattern
-func (fs *FilesystemHandler) handleSearchFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, ok := request.GetArguments()["path"].(string)
-	if !ok {
-		return nil, fmt.Errorf("path must be a string")
-	}
-	pattern, ok := request.GetArguments()["pattern"].(string)
-	if !ok {
-		return nil, fmt.Errorf("pattern must be a string")
-	}
-
-	if path == "." || path == "./" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error resolving current directory: %v", err)},
-				},
-				IsError: true,
-			}, nil
-		}
-		path = cwd
-	}
-
-	validPath, err := fs.validatePath(path)
-	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
-			},
-			IsError: true,
-		}, nil
-	}
-
-	info, err := os.Stat(validPath)
-	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
-			},
-			IsError: true,
-		}, nil
-	}
-
-	if !info.IsDir() {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: "Error: Search path must be a directory"},
-			},
-			IsError: true,
-		}, nil
-	}
-
-	results, err := fs.searchFiles(validPath, pattern)
-	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error searching files: %v", err)},
-			},
-			IsError: true,
-		}, nil
-	}
-
-	if len(results) == 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("No files found matching pattern '%s' in %s", pattern, path)},
-			},
-		}, nil
-	}
-
-	var formattedResults strings.Builder
-	formattedResults.WriteString(fmt.Sprintf("Found %d results:\n\n", len(results)))
-
-	for _, result := range results {
-		resourceURI := pathToResourceURI(result)
-		info, err := os.Stat(result)
-		if err == nil {
-			if info.IsDir() {
-				formattedResults.WriteString(fmt.Sprintf("[DIR]  %s (%s)\n", result, resourceURI))
-			} else {
-				formattedResults.WriteString(fmt.Sprintf("[FILE] %s (%s) - %d bytes\n", result, resourceURI, info.Size()))
-			}
-		} else {
-			formattedResults.WriteString(fmt.Sprintf("%s (%s)\n", result, resourceURI))
-		}
-	}
-
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{Type: "text", Text: formattedResults.String()},
-		},
-	}, nil
-}
-
 // handleTree generates a tree view of directory structure
 func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
@@ -291,6 +196,7 @@ func (fs *FilesystemHandler) handleGetFileInfo(ctx context.Context, request mcp.
 
 // handleReadMultipleFiles reads multiple files at once
 func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	appendSubOperation(ctx, "read_multiple.parse_arguments")
 	pathsParam, ok := request.GetArguments()["paths"]
 	if !ok {
 		return nil, fmt.Errorf("paths parameter is required")
@@ -321,13 +227,15 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 	}
 
 	var results []mcp.Content
-	for _, pathInterface := range pathsSlice {
+	for index, pathInterface := range pathsSlice {
+		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.begin", index))
 		path, ok := pathInterface.(string)
 		if !ok {
 			return nil, fmt.Errorf("each path must be a string")
 		}
 
 		if path == "." || path == "./" {
+			appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.resolve_cwd", index))
 			cwd, err := os.Getwd()
 			if err != nil {
 				results = append(results, mcp.TextContent{
@@ -339,6 +247,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 			path = cwd
 		}
 
+		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.validate_path", index))
 		validPath, err := fs.validatePath(path)
 		if err != nil {
 			results = append(results, mcp.TextContent{
@@ -348,6 +257,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 			continue
 		}
 
+		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.stat_target", index))
 		info, err := os.Stat(validPath)
 		if err != nil {
 			results = append(results, mcp.TextContent{
@@ -358,6 +268,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 		}
 
 		if info.IsDir() {
+			appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.directory_resource", index))
 			resourceURI := pathToResourceURI(validPath)
 			results = append(results, mcp.TextContent{
 				Type: "text",
@@ -367,6 +278,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 		}
 
 		if info.Size() > MAX_INLINE_SIZE {
+			appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.large_resource", index))
 			resourceURI := pathToResourceURI(validPath)
 			results = append(results, mcp.TextContent{
 				Type: "text",
@@ -375,6 +287,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 			continue
 		}
 
+		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.load_file", index))
 		content, err := os.ReadFile(validPath)
 		if err != nil {
 			results = append(results, mcp.TextContent{
@@ -389,13 +302,16 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 			Text: fmt.Sprintf("--- File: %s ---", path),
 		})
 
+		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.detect_mime", index))
 		mimeType := detectMimeType(validPath)
 		if isTextFile(mimeType) {
+			appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.return_text", index))
 			results = append(results, mcp.TextContent{
 				Type: "text",
 				Text: string(content),
 			})
 		} else {
+			appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.return_binary_resource", index))
 			resourceURI := pathToResourceURI(validPath)
 			results = append(results, mcp.TextContent{
 				Type: "text",
@@ -403,6 +319,7 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 			})
 		}
 	}
+	appendSubOperation(ctx, fmt.Sprintf("read_multiple.completed.%d", len(pathsSlice)))
 
 	return &mcp.CallToolResult{
 		Content: results,
@@ -429,39 +346,6 @@ func (fs *FilesystemHandler) handleListAllowedDirectories(ctx context.Context, r
 			mcp.TextContent{Type: "text", Text: result.String()},
 		},
 	}, nil
-}
-
-// Helper functions
-func (fs *FilesystemHandler) searchFiles(rootPath, pattern string) ([]string, error) {
-	var results []string
-	lowerPattern := strings.ToLower(pattern)
-	isGlob := strings.ContainsAny(pattern, "*?[")
-
-	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if _, err := fs.validatePath(path); err != nil {
-			return nil
-		}
-
-		name := info.Name()
-		var matched bool
-		if isGlob {
-			matched, _ = filepath.Match(lowerPattern, strings.ToLower(name))
-		} else {
-			matched = strings.Contains(strings.ToLower(name), lowerPattern)
-		}
-		if matched {
-			results = append(results, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
 }
 
 func (fs *FilesystemHandler) getFileStats(path string) (FileInfo, error) {
