@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../MCPs/clone/mcp-filesystem-go-ultra"
+		}
+	],
+	"settings": {}
+}
