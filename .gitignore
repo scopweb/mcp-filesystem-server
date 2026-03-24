@@ -15,6 +15,7 @@ vendor/
 # Testing
 test-build.exe
 coverage.out
+filesystemserver/testdir-*/
 
 # IDE
 .vscode/
@@ -31,6 +32,7 @@ Desktop.ini
 # Agent/AI tooling
 .agent/
 .agents/
+.claude/
 .aider*
 .opencode*
 OpenCode.md
