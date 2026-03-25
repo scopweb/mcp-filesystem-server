@@ -11,6 +11,18 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+func editFileErrorResult(message string) (*mcp.CallToolResult, error) {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{
+				Type: "text",
+				Text: fmt.Sprintf("Error: %s", message),
+			},
+		},
+		IsError: true,
+	}, nil
+}
+
 // handleEditFile handles file editing operations
 func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	appendSubOperation(ctx, "edit.parse_arguments")
@@ -23,16 +35,16 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 			case string:
 				params[param] = v
 			case nil:
-				return nil, fmt.Errorf("parameter %s is null", param)
+				return editFileErrorResult(fmt.Sprintf("parameter %s is null", param))
 			default:
 				if str, ok := convertToString(v); ok {
 					params[param] = str
 				} else {
-					return nil, fmt.Errorf("parameter %s must be string, got %T: %v", param, v, v)
+					return editFileErrorResult(fmt.Sprintf("parameter %s must be string, got %T: %v", param, v, v))
 				}
 			}
 		} else {
-			return nil, fmt.Errorf("missing required parameter: %s", param)
+			return editFileErrorResult(fmt.Sprintf("missing required parameter: %s", param))
 		}
 	}
 
@@ -43,18 +55,18 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	appendSubOperation(ctx, "edit.validate_path")
 	validPath, err := fs.validatePath(path)
 	if err != nil {
-		return nil, fmt.Errorf("path error: %v", err)
+		return editFileErrorResult(fmt.Sprintf("path error: %v", err))
 	}
 
 	appendSubOperation(ctx, "edit.validate_editable")
 	if err := fs.validateEditableFile(validPath); err != nil {
-		return nil, err
+		return editFileErrorResult(err.Error())
 	}
 
 	appendSubOperation(ctx, "edit.create_backup")
 	backupPath, err := fs.createBackup(validPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not create backup: %v", err)
+		return editFileErrorResult(fmt.Sprintf("could not create backup: %v", err))
 	}
 	defer func() {
 		if backupPath != "" {
@@ -66,7 +78,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	appendSubOperation(ctx, "edit.read_file")
 	content, err := os.ReadFile(validPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file: %v", err)
+		return editFileErrorResult(fmt.Sprintf("error reading file: %v", err))
 	}
 
 	appendSubOperation(ctx, "edit.analyze_content")
@@ -74,7 +86,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 	appendSubOperation(ctx, "edit.compute_replacement")
 	result, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
 	if err != nil {
-		return nil, err
+		return editFileErrorResult(err.Error())
 	}
 	appendSubOperation(ctx, "edit.match_confidence."+result.MatchConfidence)
 
@@ -141,7 +153,7 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 
 	appendSubOperation(ctx, "edit.write_file")
 	if err := os.WriteFile(validPath, []byte(result.ModifiedContent), 0644); err != nil {
-		return nil, fmt.Errorf("error writing file: %v", err)
+		return editFileErrorResult(fmt.Sprintf("error writing file: %v", err))
 	}
 
 	if backupPath != "" {

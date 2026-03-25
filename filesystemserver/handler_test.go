@@ -79,7 +79,7 @@ func TestEditFile(t *testing.T) {
 
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
-	
+
 	// Test valid edit
 	request := mcp.CallToolRequest{}
 	request.Params.Name = "edit_file"
@@ -98,7 +98,7 @@ func TestEditFile(t *testing.T) {
 	updatedContent, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, "This is a test file with modified content that we want to modify.", string(updatedContent))
-	
+
 	// Test non-existent text
 	request.Params.Arguments = map[string]any{
 		"path":     filePath,
@@ -112,6 +112,27 @@ func TestEditFile(t *testing.T) {
 	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "📝 Changes: 0 replacement(s)")
 }
 
+func TestEditFile_InvalidPathReturnsToolError(t *testing.T) {
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	missingParentPath := filepath.Join(dir, "missing", "edit_test.txt")
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "edit_file"
+	request.Params.Arguments = map[string]any{
+		"path":     missingParentPath,
+		"old_text": "before",
+		"new_text": "after",
+	}
+
+	result, err := handler.handleEditFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "path error: parent directory does not exist")
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, filepath.Join(dir, "missing"))
+}
+
 // Test de handleWriteFile
 func TestWriteFile_Valid(t *testing.T) {
 	dir := t.TempDir()
@@ -122,7 +143,7 @@ func TestWriteFile_Valid(t *testing.T) {
 	request := mcp.CallToolRequest{}
 	request.Params.Name = "write_file"
 	request.Params.Arguments = map[string]any{
-		"path": filepath.Join(dir, "test"),
+		"path":    filepath.Join(dir, "test"),
 		"content": content,
 	}
 
@@ -145,7 +166,7 @@ func TestWriteFile_InvalidPath(t *testing.T) {
 	request := mcp.CallToolRequest{}
 	request.Params.Name = "write_file"
 	request.Params.Arguments = map[string]any{
-		"path": "/forbidden/path",
+		"path":    "/forbidden/path",
 		"content": "test",
 	}
 
@@ -153,6 +174,43 @@ func TestWriteFile_InvalidPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "access denied - path outside allowed directories")
+}
+
+func TestTryFetchRoots_SkipsWhenAllowedDirsConfigured(t *testing.T) {
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	called := false
+	handler.requestRootsFn = func(ctx context.Context) ([]string, error) {
+		called = true
+		return []string{t.TempDir()}, nil
+	}
+
+	fetched := handler.tryFetchRoots(context.Background())
+
+	assert.False(t, fetched)
+	assert.False(t, called)
+	assert.False(t, handler.rootsFetched)
+	assert.Len(t, handler.allowedDirs, 1)
+}
+
+func TestTryFetchRoots_LoadsDynamicRootsWithoutAllowedDirs(t *testing.T) {
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler(nil)
+	require.NoError(t, err)
+
+	handler.requestRootsFn = func(ctx context.Context) ([]string, error) {
+		return []string{dir}, nil
+	}
+
+	fetched := handler.tryFetchRoots(context.Background())
+
+	assert.True(t, fetched)
+	assert.True(t, handler.rootsFetched)
+	if assert.Len(t, handler.allowedDirs, 1) {
+		assert.Equal(t, filepath.Clean(dir)+string(filepath.Separator), handler.allowedDirs[0])
+	}
 }
 
 // Test de handleListDirectory
