@@ -5,34 +5,34 @@ description: Load and discover all available tools from the filesystem-light MCP
 
 # Filesystem Light - Tool Discovery
 
-## ACCION OBLIGATORIA
+## MANDATORY ACTION
 
-Llama a `filesystem-light:help` como **primera accion absoluta** de esta conversacion, **ANTES de cualquier tool_search u otra herramienta**. Esta llamada carga directamente el catalogo completo de herramientas sin pasos intermedios.
+Call `filesystem-light:help` as the **absolute first action** of this conversation, **BEFORE any tool_search or other tool call**. This call directly loads the complete tool catalog with no intermediate steps.
 
-NO hagas tool_search para buscar "help" o "filesystem". Llama directamente:
+Do NOT use tool_search to look for "help" or "filesystem". Call directly:
 
 ```
 filesystem-light:help()
 ```
 
-Sin argumentos. Sin busqueda previa. Sin intermediarios.
+No arguments. No prior search. No intermediaries.
 
-## Por que
+## Why
 
-MCP clients como Claude Desktop usan **lazy tool loading** — solo descubren un subconjunto de herramientas por semantic search de la query actual. Si haces tool_search primero, cargas 4-5 herramientas parciales y el catalogo completo queda enterrado.
+MCP clients like Claude Desktop use **lazy tool loading** — they only discover a subset of tools via semantic search of the current query. If you do tool_search first, you load 4-5 partial tools and the full catalog gets buried.
 
-Llamando `help` directamente obtienes las **19 herramientas** de golpe.
+Calling `help` directly gives you all **19 tools** at once.
 
-## Despues de llamar help
+## After calling help
 
-Usa la herramienta correcta para cada tarea:
+Use the right tool for each task:
 
-- **Modificar archivos existentes** → `edit_file` (NO `write_file`)
-- **Explorar archivos grandes** → `read_file` con `outline=true`, luego `start_line/end_line`
-- **Buscar contenido** → `search` con `mode=content`
-- **Operaciones masivas** → `batch_operations`
-- **Comparar archivos** → `compare_files`
-- **Analizar proyecto** → `analyze_project`
-- **Listar recursivo** → `list_directory` con `depth=N`
-- **Arbol visual** → `tree`
-- **Imagenes/binarios** → `read_media_file`
+- **Modify existing files** → `edit_file` (NOT `write_file`)
+- **Explore large files** → `read_file` with `outline=true`, then `start_line/end_line`
+- **Search content** → `search` with `mode=content`
+- **Bulk operations** → `batch_operations`
+- **Compare files** → `compare_files`
+- **Analyze project** → `analyze_project`
+- **Recursive listing** → `list_directory` with `depth=N`
+- **Visual tree** → `tree`
+- **Images/binaries** → `read_media_file`
