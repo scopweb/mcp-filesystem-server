@@ -704,14 +704,8 @@ func buildUnifiedDiff(original, modified, filename string) string {
 	return sb.String()
 }
 
-// calculateLinesWithText calculates how many lines contain the specified text
+// calculateLinesWithText calculates how many lines are affected by the text
 func calculateLinesWithText(content, text string) int {
-	lines := strings.Split(content, "\n")
-	count := 0
-	for _, line := range lines {
-		if strings.Contains(line, text) {
-			count++
-		}
-	}
-	return count
+	// Count how many lines the matched text spans
+	return strings.Count(text, "\n") + 1
 }
