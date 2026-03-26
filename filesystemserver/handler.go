@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -81,12 +82,44 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		return editFileErrorResult(fmt.Sprintf("error reading file: %v", err))
 	}
 
-	appendSubOperation(ctx, "edit.analyze_content")
-	analysis := fs.analyzeContent(string(content), oldText)
-	appendSubOperation(ctx, "edit.compute_replacement")
-	result, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
-	if err != nil {
-		return editFileErrorResult(err.Error())
+	// Internal timeout to prevent Claude Desktop 4-minute timeout kills.
+	// analyzeContent + performIntelligentEdit can be slow on large files.
+	const editTimeout = 2 * time.Minute
+	type editResult struct {
+		result *EditResult
+		err    error
+	}
+	editCh := make(chan editResult, 1)
+	go func() {
+		analysis := fs.analyzeContent(string(content), oldText)
+		r, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
+		editCh <- editResult{r, err}
+	}()
+
+	appendSubOperation(ctx, "edit.analyze_and_replace")
+	var result *EditResult
+	if ctx != nil {
+		select {
+		case er := <-editCh:
+			if er.err != nil {
+				return editFileErrorResult(er.err.Error())
+			}
+			result = er.result
+		case <-time.After(editTimeout):
+			return editFileErrorResult(fmt.Sprintf("edit timed out after %s — file may be too large for intelligent matching. Try a more specific old_text or split into smaller edits.", editTimeout))
+		case <-ctx.Done():
+			return editFileErrorResult(fmt.Sprintf("edit cancelled: %v", ctx.Err()))
+		}
+	} else {
+		select {
+		case er := <-editCh:
+			if er.err != nil {
+				return editFileErrorResult(er.err.Error())
+			}
+			result = er.result
+		case <-time.After(editTimeout):
+			return editFileErrorResult(fmt.Sprintf("edit timed out after %s — file may be too large for intelligent matching. Try a more specific old_text or split into smaller edits.", editTimeout))
+		}
 	}
 	appendSubOperation(ctx, "edit.match_confidence."+result.MatchConfidence)
 
