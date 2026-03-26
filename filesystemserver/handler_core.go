@@ -162,16 +162,26 @@ func (fs *FilesystemHandler) validatePath(requestedPath string) (string, error) 
 		if !os.IsNotExist(err) {
 			return "", err
 		}
-		parent := filepath.Dir(abs)
-		realParent, err := filepath.EvalSymlinks(parent)
-		if err != nil {
-			return "", fmt.Errorf("parent directory does not exist: %s", parent)
+		// Walk up until we find an ancestor that exists
+		ancestor := abs
+		for {
+			parent := filepath.Dir(ancestor)
+			if parent == ancestor {
+				// Reached filesystem root without finding an existing dir
+				return "", fmt.Errorf("no existing ancestor directory found for: %s", abs)
+			}
+			ancestor = parent
+			realAncestor, err := filepath.EvalSymlinks(ancestor)
+			if err == nil {
+				if !fs.isPathInAllowedDirs(realAncestor) {
+					return "", fmt.Errorf("access denied - parent directory outside allowed directories")
+				}
+				return abs, nil
+			}
+			if !os.IsNotExist(err) {
+				return "", fmt.Errorf("error resolving ancestor path: %w", err)
+			}
 		}
-
-		if !fs.isPathInAllowedDirs(realParent) {
-			return "", fmt.Errorf("access denied - parent directory outside allowed directories")
-		}
-		return abs, nil
 	}
 
 	if !fs.isPathInAllowedDirs(realPath) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -129,8 +130,15 @@ func TestEditFile_InvalidPathReturnsToolError(t *testing.T) {
 	result, err := handler.handleEditFile(context.Background(), request)
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
-	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "path error: parent directory does not exist")
-	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, filepath.Join(dir, "missing"))
+	// validatePath now walks up to find an existing ancestor, so the path is accepted.
+	// edit_file then fails because the file doesn't exist on disk.
+	errText := result.Content[0].(mcp.TextContent).Text
+	assert.True(t,
+		strings.Contains(errText, "no puede encontrar") ||
+			strings.Contains(errText, "no such file") ||
+			strings.Contains(errText, "cannot find") ||
+			strings.Contains(errText, "system cannot find"),
+		"expected file-not-found error, got: %s", errText)
 }
 
 // Test de handleWriteFile
