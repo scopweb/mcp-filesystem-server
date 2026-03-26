@@ -15,7 +15,7 @@ import (
 func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	if path == "." || path == "./" {
@@ -74,7 +74,7 @@ func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToo
 		}, nil
 	}
 
-	tree, err := fs.buildTree(validPath, depth, 0, followSymlinks)
+	tree, err := fs.buildTree(ctx, validPath, depth, 0, followSymlinks)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -114,7 +114,7 @@ func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToo
 func (fs *FilesystemHandler) handleGetFileInfo(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	if path == "." || path == "./" {
@@ -199,12 +199,12 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 	appendSubOperation(ctx, "read_multiple.parse_arguments")
 	pathsParam, ok := request.GetArguments()["paths"]
 	if !ok {
-		return nil, fmt.Errorf("paths parameter is required")
+		return toolError("paths parameter is required")
 	}
 
 	pathsSlice, ok := pathsParam.([]any)
 	if !ok {
-		return nil, fmt.Errorf("paths must be an array of strings")
+		return toolError("paths must be an array of strings")
 	}
 
 	if len(pathsSlice) == 0 {
@@ -227,11 +227,19 @@ func (fs *FilesystemHandler) handleReadMultipleFiles(ctx context.Context, reques
 	}
 
 	var results []mcp.Content
+	total := float64(len(pathsSlice))
 	for index, pathInterface := range pathsSlice {
+		// Cancellation check
+		select {
+		case <-ctx.Done():
+			return toolError("operation cancelled")
+		default:
+		}
+		fs.sendProgress(ctx, float64(index), total, fmt.Sprintf("Reading file %d/%d", index+1, int(total)))
 		appendSubOperation(ctx, fmt.Sprintf("read_multiple.file.%d.begin", index))
 		path, ok := pathInterface.(string)
 		if !ok {
-			return nil, fmt.Errorf("each path must be a string")
+			return toolError("each path must be a string")
 		}
 
 		if path == "." || path == "./" {
@@ -365,7 +373,14 @@ func (fs *FilesystemHandler) getFileStats(path string) (FileInfo, error) {
 	}, nil
 }
 
-func (fs *FilesystemHandler) buildTree(path string, maxDepth int, currentDepth int, followSymlinks bool) (*FileNode, error) {
+func (fs *FilesystemHandler) buildTree(ctx context.Context, path string, maxDepth int, currentDepth int, followSymlinks bool) (*FileNode, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	validPath, err := fs.validatePath(path)
 	if err != nil {
 		return nil, err
@@ -411,7 +426,7 @@ func (fs *FilesystemHandler) buildTree(path string, maxDepth int, currentDepth i
 					entryPath = linkDest
 				}
 
-				childNode, err := fs.buildTree(entryPath, maxDepth, currentDepth+1, followSymlinks)
+				childNode, err := fs.buildTree(ctx, entryPath, maxDepth, currentDepth+1, followSymlinks)
 				if err != nil {
 					continue
 				}

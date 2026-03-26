@@ -58,7 +58,7 @@ func (fs *FilesystemHandler) handleAnalyzeProject(ctx context.Context, request m
 		}, nil
 	}
 
-	structure, err := fs.analyzeProjectStructure(validPath)
+	structure, err := fs.analyzeProjectStructure(ctx, validPath)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -132,7 +132,7 @@ func (fs *FilesystemHandler) handleAnalyzeProject(ctx context.Context, request m
 }
 
 // analyzeProjectStructure - Realiza el análisis detallado del proyecto
-func (fs *FilesystemHandler) analyzeProjectStructure(path string) (*ProjectStructure, error) {
+func (fs *FilesystemHandler) analyzeProjectStructure(ctx context.Context, path string) (*ProjectStructure, error) {
 	structure := &ProjectStructure{
 		Root:        path,
 		Languages:   make(map[string]int),
@@ -144,6 +144,11 @@ func (fs *FilesystemHandler) analyzeProjectStructure(path string) (*ProjectStruc
 	err := filepath.Walk(path, func(currentPath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // Continuar con otros archivos
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 
 		// Validar path

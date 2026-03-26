@@ -47,9 +47,18 @@ func (fs *FilesystemHandler) handleBatchEdit(ctx context.Context, request mcp.Ca
 
 	results := []string{}
 	errors := []string{}
+	total := float64(len(operationsParam))
 	appendSubOperation(ctx, fmt.Sprintf("batch.operation_count.%d", len(operationsParam)))
+	fs.sendLog(ctx, "info", fmt.Sprintf("Starting batch: %d operations", len(operationsParam)))
 
 	for i, op := range operationsParam {
+		// Cancellation check
+		select {
+		case <-ctx.Done():
+			return toolError("batch operation cancelled")
+		default:
+		}
+		fs.sendProgress(ctx, float64(i), total, fmt.Sprintf("Operation %d/%d", i+1, int(total)))
 		opMap, ok := op.(map[string]interface{})
 		if !ok {
 			appendSubOperation(ctx, fmt.Sprintf("batch.operation.%d.invalid_format", i+1))

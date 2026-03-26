@@ -17,7 +17,7 @@ echo.
 echo  Compilando proyecto Go en %CD%
 echo.
 
-go build ./...
+go build -o mcp-filesystem-server.exe .
 if errorlevel 1 (
     echo.
     echo  La compilacion ha fallado.

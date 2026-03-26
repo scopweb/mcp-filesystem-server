@@ -32,7 +32,10 @@ Desktop.ini
 # Agent/AI tooling
 .agent/
 .agents/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/filesystem-light-tools/
 .aider*
 .opencode*
 OpenCode.md

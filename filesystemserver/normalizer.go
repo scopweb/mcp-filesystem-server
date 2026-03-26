@@ -338,11 +338,26 @@ func FixLiteralEscapes(s string) string {
 
 // ── Handler wrapper ─────────────────────────────────────────────────────────
 
-// withNormalize wraps a handler with request normalization.
-// This is the single integration point — every handler goes through here.
+// withNormalize wraps a handler with rate limiting, request normalization,
+// and output sanitization. This is the single integration point — every
+// handler goes through here.
 func (fs *FilesystemHandler) withNormalize(tool string, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
 	normalizer := NewNormalizer()
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Rate limiting (before any work)
+		if !fs.limiter.allow() {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{
+						Type: "text",
+						Text: fmt.Sprintf("Rate limit exceeded: max %d calls per %s. Please wait before retrying.",
+							fs.limiter.maxCalls, fs.limiter.window),
+					},
+				},
+				IsError: true,
+			}, nil
+		}
+
 		ctx = withAuditContext(ctx, extractRequestIDFromToolRequest(request))
 		start := time.Now().UTC()
 		rootsFetched := fs.tryFetchRoots(ctx)
@@ -358,7 +373,39 @@ func (fs *FilesystemHandler) withNormalize(tool string, handler server.ToolHandl
 			appendSubOperation(ctx, "normalize_arguments")
 		}
 		result, err := handler(ctx, request)
+
+		// Sanitize text content in output and add content annotations
+		if result != nil {
+			audience := contentAudienceForTool(tool)
+			for i, content := range result.Content {
+				if tc, ok := content.(mcp.TextContent); ok {
+					tc.Text = sanitizeOutput(tc.Text)
+					if tc.Annotations == nil && audience != nil {
+						tc.Annotations = &mcp.Annotations{Audience: audience}
+					}
+					result.Content[i] = tc
+				}
+			}
+		}
+
 		fs.logToolCall(ctx, start, tool, rawArgs, normalizedArgs, buildInternalAction(rootsFetched, rawArgs, normalizedArgs), result, err)
 		return result, err
+	}
+}
+
+// contentAudienceForTool returns the appropriate audience annotation for a tool's output.
+// Read tools produce content primarily for the assistant; write/edit tools produce
+// confirmations for the user.
+func contentAudienceForTool(tool string) []mcp.Role {
+	switch tool {
+	case "read_file", "read_multiple_files", "read_media_file",
+		"search", "tree", "get_file_info", "analyze_project",
+		"compare_files", "list_directory", "list_allowed_directories":
+		return []mcp.Role{mcp.RoleAssistant}
+	case "write_file", "edit_file", "copy_file", "move_file",
+		"delete_file", "create_directory", "batch_operations":
+		return []mcp.Role{mcp.RoleUser, mcp.RoleAssistant}
+	default:
+		return nil
 	}
 }

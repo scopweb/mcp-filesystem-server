@@ -44,9 +44,35 @@ Docker:
 docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 ```
 
+## Tool Discovery
+
+Claude Desktop uses **lazy tool loading** — it only discovers ~5 tools per query via semantic search, missing most of the 19 available tools.
+
+Three layers solve this:
+
+| Layer | How it works | Client support |
+|-------|-------------|----------------|
+| **`/filesystem-light-tools` skill** | Claude Code skill that calls `help` on conversation start | Claude Code |
+| **`help` tool** | Keyword-rich description; returns full 19-tool catalog | Any MCP client |
+| **`server.WithInstructions()`** | Sends catalog during MCP initialize handshake | Spec-compliant clients |
+
+### Using the skill
+
+The skill ships in `.claude/skills/filesystem-light-tools/`. In Claude Code or Claude Desktop, invoke:
+
+```
+/filesystem-light-tools
+```
+
+This calls the `help` tool and loads the full catalog. You can also add this to your project instructions:
+
+```
+Al inicio de cada conversación, llama a la herramienta help del MCP filesystem-light
+```
+
 ## Tools
 
-**File operations**: `read_file` (supports `start_line`/`end_line`), `write_file` (supports `create_backup`, `chunk_index`/`total_chunks`), `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory`, `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
+**File operations**: `read_file` (supports `start_line`/`end_line`, `outline`), `write_file` (supports `create_backup`, `chunk_index`/`total_chunks`), `edit_file` (supports `dry_run`), `copy_file`, `move_file`, `delete_file`, `list_directory` (supports `depth`), `create_directory`, `tree`, `read_multiple_files`, `get_file_info`, `list_allowed_directories`
 
 **Search**: `search` — unified: `mode: "files"` (glob/substring), `mode: "content"` (regex + `context_lines`), `mode: "duplicates"` (MD5 hash scan)
 
@@ -55,6 +81,8 @@ docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
 **Batch & advanced**: `batch_operations`, `plan_task`
 
 **Media**: `read_media_file` — reads images as `ImageContent`, other binary files as base64 text with MIME type
+
+**System**: `help` — full tool catalog with usage rules and best practices
 
 ## Normalizer
 
@@ -76,7 +104,7 @@ All paths validated against an allow-list. Symlinks resolved and re-checked. Pat
 
 | | This server | [ultra](https://github.com/scopweb/mcp-filesystem-go-ultra) |
 |---|---|---|
-| Tools | 18 | 16 (consolidated) |
+| Tools | 19 | 16 (consolidated) |
 | Normalizer | Yes (ported) | Yes (original) |
 | Backup/restore | No | Yes |
 | Pipeline executor | No | Yes |

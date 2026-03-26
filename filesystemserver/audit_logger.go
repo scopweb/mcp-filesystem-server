@@ -345,6 +345,20 @@ func (fs *FilesystemHandler) getAuditLogger() *AuditLogger {
 
 func (fs *FilesystemHandler) withAudit(tool string, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Rate limiting (consistent with withNormalize)
+		if !fs.limiter.allow() {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{
+						Type: "text",
+						Text: fmt.Sprintf("Rate limit exceeded: max %d calls per %s. Please wait before retrying.",
+							fs.limiter.maxCalls, fs.limiter.window),
+					},
+				},
+				IsError: true,
+			}, nil
+		}
+
 		ctx = withAuditContext(ctx, extractRequestIDFromToolRequest(request))
 		start := time.Now().UTC()
 		result, err := handler(ctx, request)

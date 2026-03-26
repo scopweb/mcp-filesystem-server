@@ -86,6 +86,12 @@ func (fs *FilesystemHandler) searchByName(ctx context.Context, validPath string,
 		if err != nil {
 			return nil
 		}
+		// Cancellation check
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if _, err := fs.validatePath(currentPath); err != nil {
 			return nil
 		}
@@ -235,6 +241,11 @@ func (fs *FilesystemHandler) performSmartSearch(ctx context.Context, path, patte
 		if err != nil {
 			return nil
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if _, err := fs.validatePath(currentPath); err != nil {
 			return nil
 		}
@@ -327,6 +338,11 @@ func (fs *FilesystemHandler) findDuplicateFiles(ctx context.Context, path string
 	err := filepath.Walk(path, func(currentPath string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 		if _, err := fs.validatePath(currentPath); err != nil {
 			return nil

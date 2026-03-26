@@ -411,3 +411,136 @@ func TestTree_InvalidPath(t *testing.T) {
 	assert.True(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "Error:")
 }
+
+func TestReadfile_Outline_Go(t *testing.T) {
+	dir := t.TempDir()
+	goCode := `package main
+
+import "fmt"
+
+type Server struct {
+	Name string
+}
+
+type Handler interface {
+	Handle()
+}
+
+func NewServer() *Server {
+	return &Server{}
+}
+
+func (s *Server) Start() {
+	fmt.Println("started")
+}
+
+var defaultPort = 8080
+
+const maxRetries = 3
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(goCode), 0644)
+	require.NoError(t, err)
+
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "read_file"
+	request.Params.Arguments = map[string]any{
+		"path":    filepath.Join(dir, "main.go"),
+		"outline": true,
+	}
+
+	result, err := handler.handleReadFile(context.Background(), request)
+	require.NoError(t, err)
+	text := result.Content[0].(mcp.TextContent).Text
+	assert.Contains(t, text, "=== Structs ===")
+	assert.Contains(t, text, "=== Interfaces ===")
+	assert.Contains(t, text, "=== Functions ===")
+	assert.Contains(t, text, "=== Methods ===")
+	assert.Contains(t, text, "type Server struct")
+	assert.Contains(t, text, "func NewServer()")
+	assert.Contains(t, text, "func (s *Server) Start()")
+}
+
+func TestReadfile_Outline_Python(t *testing.T) {
+	dir := t.TempDir()
+	pyCode := `class UserService:
+    def __init__(self, db):
+        self.db = db
+
+    def get_user(self, user_id):
+        return self.db.get(user_id)
+
+def main():
+    svc = UserService(None)
+`
+	err := os.WriteFile(filepath.Join(dir, "app.py"), []byte(pyCode), 0644)
+	require.NoError(t, err)
+
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "read_file"
+	request.Params.Arguments = map[string]any{
+		"path":    filepath.Join(dir, "app.py"),
+		"outline": true,
+	}
+
+	result, err := handler.handleReadFile(context.Background(), request)
+	require.NoError(t, err)
+	text := result.Content[0].(mcp.TextContent).Text
+	assert.Contains(t, text, "=== Classes ===")
+	assert.Contains(t, text, "=== Functions ===")
+	assert.Contains(t, text, "=== Methods ===")
+	assert.Contains(t, text, "class UserService:")
+	assert.Contains(t, text, "def main():")
+}
+
+func TestReadfile_Outline_UnsupportedExtension(t *testing.T) {
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0644)
+	require.NoError(t, err)
+
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "read_file"
+	request.Params.Arguments = map[string]any{
+		"path":    filepath.Join(dir, "notes.txt"),
+		"outline": true,
+	}
+
+	result, err := handler.handleReadFile(context.Background(), request)
+	require.NoError(t, err)
+	text := result.Content[0].(mcp.TextContent).Text
+	assert.Contains(t, text, "Outline not supported")
+	assert.Contains(t, text, ".txt")
+}
+
+func TestReadfile_Outline_NoSymbols(t *testing.T) {
+	dir := t.TempDir()
+	goCode := `package main
+
+// This file has no symbols, just a comment.
+`
+	err := os.WriteFile(filepath.Join(dir, "empty.go"), []byte(goCode), 0644)
+	require.NoError(t, err)
+
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "read_file"
+	request.Params.Arguments = map[string]any{
+		"path":    filepath.Join(dir, "empty.go"),
+		"outline": true,
+	}
+
+	result, err := handler.handleReadFile(context.Background(), request)
+	require.NoError(t, err)
+	text := result.Content[0].(mcp.TextContent).Text
+	assert.Contains(t, text, "No symbols found")
+}

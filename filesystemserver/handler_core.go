@@ -14,6 +14,54 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// sendProgress sends a progress notification to the client (best-effort, never errors).
+func (fs *FilesystemHandler) sendProgress(ctx context.Context, progress, total float64, message string) {
+	if fs.mcpServer == nil {
+		return
+	}
+	params := map[string]any{
+		"progress": progress,
+		"total":    total,
+		"message":  message,
+	}
+	_ = fs.mcpServer.SendNotificationToClient(ctx, "notifications/progress", params)
+}
+
+// sendLog sends a logging notification to the client (best-effort, never errors).
+func (fs *FilesystemHandler) sendLog(ctx context.Context, level mcp.LoggingLevel, message string) {
+	if fs.mcpServer == nil {
+		return
+	}
+	params := map[string]any{
+		"level":  string(level),
+		"logger": "filesystem-server",
+		"data":   message,
+	}
+	_ = fs.mcpServer.SendNotificationToClient(ctx, "notifications/message", params)
+}
+
+// refreshRoots re-fetches roots from the client. Called on roots/list_changed notification.
+func (fs *FilesystemHandler) refreshRoots(ctx context.Context) {
+	if fs.requestRootsFn == nil {
+		return
+	}
+	dirs, err := fs.requestRootsFn(ctx)
+	if err != nil || len(dirs) == 0 {
+		return
+	}
+	normalized := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		normalized = append(normalized, filepath.Clean(abs)+string(filepath.Separator))
+	}
+	fs.mu.Lock()
+	fs.allowedDirs = normalized
+	fs.mu.Unlock()
+}
+
 // UpdateAllowedDirs replaces the allowed directory list (thread-safe).
 func (fs *FilesystemHandler) UpdateAllowedDirs(dirs []string) {
 	normalized := make([]string, 0, len(dirs))
@@ -33,6 +81,12 @@ func (fs *FilesystemHandler) UpdateAllowedDirs(dirs []string) {
 // It only runs once per handler lifetime; subsequent calls are no-ops.
 func (fs *FilesystemHandler) tryFetchRoots(ctx context.Context) bool {
 	if fs.requestRootsFn == nil {
+		return false
+	}
+	fs.mu.RLock()
+	hasAllowedDirs := len(fs.allowedDirs) > 0
+	fs.mu.RUnlock()
+	if hasAllowedDirs {
 		return false
 	}
 	fs.mu.Lock()
@@ -159,7 +213,7 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 	appendSubOperation(ctx, "read.parse_arguments")
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	// Optional line range (1-based, inclusive on both ends)
@@ -230,6 +284,37 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	// Outline mode: return symbol index instead of file contents
+	outline := false
+	if v, ok := request.GetArguments()["outline"].(bool); ok {
+		outline = v
+	}
+	if outline {
+		appendSubOperation(ctx, "read.outline")
+		lang := languageFromExtension(validPath)
+		if lang == "" {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Outline not supported for file extension: %s\nSupported: %s", filepath.Ext(validPath), supportedExtensions())},
+				},
+			}, nil
+		}
+		result, err := extractOutline(validPath, lang)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error extracting outline: %v", err)},
+				},
+				IsError: true,
+			}, nil
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: result},
+			},
+		}, nil
+	}
+
 	if info.Size() > MAX_INLINE_SIZE && !lineRangeRequested {
 		appendSubOperation(ctx, "read.return_large_resource")
 		resourceURI := pathToResourceURI(validPath)
@@ -279,7 +364,15 @@ func (fs *FilesystemHandler) handleReadFile(ctx context.Context, request mcp.Cal
 		var selected []string
 		lineNum := 0
 		for scanner.Scan() {
+			// Check for cancellation every 10000 lines
 			lineNum++
+			if lineNum%10000 == 0 {
+				select {
+				case <-ctx.Done():
+					return toolError("operation cancelled")
+				default:
+				}
+			}
 			if lineNum >= actualStart {
 				selected = append(selected, scanner.Text())
 			}
@@ -372,11 +465,11 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 	appendSubOperation(ctx, "write.parse_arguments")
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 	content, ok := request.GetArguments()["content"].(string)
 	if !ok {
-		return nil, fmt.Errorf("content must be a string")
+		return toolError("content must be a string")
 	}
 
 	if path == "." || path == "./" {
@@ -558,11 +651,22 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 	}, nil
 }
 
-// handleListDirectory lists directory contents
+// handleListDirectory lists directory contents with optional depth recursion.
 func (fs *FilesystemHandler) handleListDirectory(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
+	}
+
+	// Parse depth (default 1, max 10)
+	maxDepth := 1
+	if v, ok := request.GetArguments()["depth"]; ok {
+		if n, ok := v.(float64); ok && n >= 1 {
+			maxDepth = int(n)
+			if maxDepth > 10 {
+				maxDepth = 10
+			}
+		}
 	}
 
 	if path == "." || path == "./" {
@@ -607,34 +711,10 @@ func (fs *FilesystemHandler) handleListDirectory(ctx context.Context, request mc
 		}, nil
 	}
 
-	entries, err := os.ReadDir(validPath)
-	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error reading directory: %v", err)},
-			},
-			IsError: true,
-		}, nil
-	}
-
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("Directory listing for: %s\n\n", validPath))
 
-	for _, entry := range entries {
-		entryPath := filepath.Join(validPath, entry.Name())
-		resourceURI := pathToResourceURI(entryPath)
-
-		if entry.IsDir() {
-			result.WriteString(fmt.Sprintf("[DIR]  %s (%s)\n", entry.Name(), resourceURI))
-		} else {
-			info, err := entry.Info()
-			if err == nil {
-				result.WriteString(fmt.Sprintf("[FILE] %s (%s) - %d bytes\n", entry.Name(), resourceURI, info.Size()))
-			} else {
-				result.WriteString(fmt.Sprintf("[FILE] %s (%s)\n", entry.Name(), resourceURI))
-			}
-		}
-	}
+	listDirRecursive(ctx, &result, validPath, "", 1, maxDepth)
 
 	resourceURI := pathToResourceURI(validPath)
 	return &mcp.CallToolResult{
@@ -652,11 +732,46 @@ func (fs *FilesystemHandler) handleListDirectory(ctx context.Context, request mc
 	}, nil
 }
 
+// listDirRecursive writes directory entries to the builder, recursing up to maxDepth levels.
+func listDirRecursive(ctx context.Context, sb *strings.Builder, dirPath, indent string, currentDepth, maxDepth int) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		sb.WriteString(fmt.Sprintf("%s[ERROR] %v\n", indent, err))
+		return
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(dirPath, entry.Name())
+		resourceURI := pathToResourceURI(entryPath)
+
+		if entry.IsDir() {
+			sb.WriteString(fmt.Sprintf("%s[DIR]  %s (%s)\n", indent, entry.Name(), resourceURI))
+			if currentDepth < maxDepth {
+				listDirRecursive(ctx, sb, entryPath, indent+"  ", currentDepth+1, maxDepth)
+			}
+		} else {
+			info, err := entry.Info()
+			if err == nil {
+				sb.WriteString(fmt.Sprintf("%s[FILE] %s (%s) - %d bytes\n", indent, entry.Name(), resourceURI, info.Size()))
+			} else {
+				sb.WriteString(fmt.Sprintf("%s[FILE] %s (%s)\n", indent, entry.Name(), resourceURI))
+			}
+		}
+	}
+}
+
 // handleCreateDirectory creates a new directory
 func (fs *FilesystemHandler) handleCreateDirectory(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	if path == "." || path == "./" {
@@ -736,7 +851,7 @@ func (fs *FilesystemHandler) handleCreateDirectory(ctx context.Context, request 
 func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	if path == "." || path == "./" {
@@ -832,7 +947,7 @@ func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.C
 func (fs *FilesystemHandler) handleReadMediaFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path, ok := request.GetArguments()["path"].(string)
 	if !ok {
-		return nil, fmt.Errorf("path must be a string")
+		return toolError("path must be a string")
 	}
 
 	validPath, err := fs.validatePath(path)

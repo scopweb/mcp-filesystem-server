@@ -558,31 +558,21 @@ func (fs *FilesystemHandler) calculateComplexity(content, language string) int {
 func (fs *FilesystemHandler) handleCopyFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	source, ok := request.GetArguments()["source"].(string)
 	if !ok {
-		return nil, fmt.Errorf("source must be a string")
+		return toolError("source must be a string")
 	}
 	destination, ok := request.GetArguments()["destination"].(string)
 	if !ok {
-		return nil, fmt.Errorf("destination must be a string")
+		return toolError("destination must be a string")
 	}
 
 	validSource, err := fs.validatePath(source)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error with source path: %v", err)},
-			},
-			IsError: true,
-		}, nil
+		return toolErrorf("Error with source path: %v", err)
 	}
 
 	validDest, err := fs.validatePath(destination)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error with destination path: %v", err)},
-			},
-			IsError: true,
-		}, nil
+		return toolErrorf("Error with destination path: %v", err)
 	}
 
 	err = copyFile(validSource, validDest)
@@ -615,11 +605,11 @@ func (fs *FilesystemHandler) handleCopyFile(ctx context.Context, request mcp.Cal
 func (fs *FilesystemHandler) handleMoveFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	source, ok := request.GetArguments()["source"].(string)
 	if !ok {
-		return nil, fmt.Errorf("source must be a string")
+		return toolError("source must be a string")
 	}
 	destination, ok := request.GetArguments()["destination"].(string)
 	if !ok {
-		return nil, fmt.Errorf("destination must be a string")
+		return toolError("destination must be a string")
 	}
 
 	validSource, err := fs.validatePath(source)

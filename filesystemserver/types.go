@@ -2,9 +2,29 @@ package filesystemserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// toolError returns a tool execution error (isError=true) instead of a
+// protocol error. Per MCP spec, input validation errors SHOULD be tool
+// execution errors so the LLM can self-correct.
+func toolError(msg string) (*mcp.CallToolResult, error) {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.TextContent{Type: "text", Text: msg},
+		},
+		IsError: true,
+	}, nil
+}
+
+// toolErrorf is like toolError but with fmt.Sprintf formatting.
+func toolErrorf(format string, args ...any) (*mcp.CallToolResult, error) {
+	return toolError(fmt.Sprintf(format, args...))
+}
 
 const (
 	// Maximum size for inline content (5MB)
@@ -44,6 +64,12 @@ type FilesystemHandler struct {
 	rootsFetched   bool
 	requestRootsFn func(ctx context.Context) ([]string, error)
 	auditLogger    *AuditLogger
+	mcpServer      mcpNotifier // for sending progress/log notifications to the client
+}
+
+// mcpNotifier abstracts the MCP server notification methods we need.
+type mcpNotifier interface {
+	SendNotificationToClient(ctx context.Context, method string, params map[string]any) error
 }
 
 // FileDiff represents the result of file comparison
