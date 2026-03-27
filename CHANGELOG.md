@@ -23,6 +23,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Log inspection tools** — new `cmd/logview`, `cmd/logdashboard`, shared `internal/logview`, and `internal/dashboardapi` make it easier to inspect recent operations, errors, timings, request parameters, and internal sub-operations.
 - **Optional proxy correlation** — new `cmd/proxy` can inject and persist correlated `request_id` traces in `proxy.jsonl` for end-to-end debugging.
 
+### Testing
+- **40 security and edge-case tests** — new `security_test.go` covering directory traversal (`../`), symlink attacks (outside dirs, nested chains), Windows paths (backslash, UNC), unicode/spaces/deep nesting, null/missing params, roots lifecycle (refresh, error, once-only), concurrent access (read, validatePath, refreshRoots), handleReadResource, copy/move destination validation, and edit_file dry_run/already_present/large-edit-tip.
+
 ### Changed
 - **Tool descriptions rewritten for discoverability** — descriptions now include action keywords (TEXT REPLACEMENT, FIND AND REPLACE, PATCH), recommended workflows, and reduced noise in cross-references. Optimized for Claude Desktop's semantic tool search.
 - **Tool execution errors** — converted `return nil, fmt.Errorf(...)` to `toolError(...)` / `toolErrorf(...)` across all handlers. Tool errors now use `IsError: true` (tool-level) instead of protocol-level errors, per MCP spec.

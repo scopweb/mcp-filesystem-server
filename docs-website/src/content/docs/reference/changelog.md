@@ -22,6 +22,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Development audit logging** — `--dev --log-dir` mode with `operations.jsonl` and `metrics.json`.
 - **Log inspection tools** — `cmd/logview`, `cmd/logdashboard`, and local dashboard.
 
+### Testing
+- **40 security and edge-case tests** — directory traversal, symlink attacks, Windows paths, roots lifecycle, concurrency, resource handler, copy/move destination validation, edit_file features.
+
 ### Changed
 - **Tool descriptions rewritten for discoverability** — action keywords, recommended workflows, reduced cross-reference noise. Optimized for Claude Desktop's semantic tool search.
 - **Tool errors** — `IsError: true` (tool-level) instead of protocol-level errors.
