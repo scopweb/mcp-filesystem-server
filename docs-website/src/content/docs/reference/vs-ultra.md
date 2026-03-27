@@ -7,7 +7,7 @@ description: Comparison between MCP Filesystem Server and the full-featured ultr
 
 | Feature | This server | [Ultra](https://github.com/scopweb/mcp-filesystem-go-ultra) |
 |---------|------------|------|
-| Tools | 29 | 16 (consolidated) |
+| Tools | 18 + 3 aliases + help | 16 (consolidated) |
 | Normalizer | Yes (ported) | Yes (original) |
 | MCP Roots | Yes | Partial |
 | Tool Annotations | Yes (all tools) | Partial |
@@ -20,15 +20,17 @@ description: Comparison between MCP Filesystem Server and the full-featured ultr
 | Regex edit mode | No | Yes |
 | WSL integration | No | Yes |
 | Hooks system | No | Yes |
-| Dashboard | No | Yes |
+| Dashboard | Yes (logdashboard) | Yes |
 | Streaming | No | Yes |
+| Official MCP aliases | Yes (3) | No |
 
 ## When to use this server
 
 - You want a simple, lightweight MCP filesystem server.
 - You don't need backup/restore, pipelines, or WSL.
 - You want the normalizer intelligence without the extra features.
-- You prefer more granular tools (27 individual) over consolidated ones (16 in ultra).
+- You need compatibility with clients trained on the official MCP filesystem server.
+- You prefer focused tools (18) over consolidated ones (16 in ultra).
 
 ## When to use ultra
 

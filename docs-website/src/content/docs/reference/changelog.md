@@ -5,6 +5,30 @@ description: Version history for MCP Filesystem Server.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Official MCP compatibility aliases** — 3 tool name aliases for clients trained on the official MCP filesystem server: `read_text_file` → `read_file`, `search_files` → `search`, `directory_tree` → `tree`.
+- **Recommended workflow in instructions** — 5-step workflow (navigate → locate → read range → edit → verify) sent during MCP initialize.
+- **`edit_file` large-edit tip** — success message includes a TIP to use `compare_files` when edits affect >10 lines.
+- **`/filesystem-light-tools` skill** — Claude Code skill for tool discovery. Solves Claude Desktop's lazy tool loading.
+- **`help` tool** — returns the full tool catalog with usage rules and best practices.
+- **`server.WithInstructions()`** — sends tool catalog during MCP initialize handshake.
+- **`read_file` outline mode** — symbol index for 14 languages with line numbers.
+- **`list_directory` depth** — multi-level recursive listing (1-10).
+- **MCP logging, progress notifications, content annotations, tool titles** — full MCP spec compliance.
+- **Roots change notifications** — refreshes allowed directories mid-session.
+- **Context cancellation** — cooperative cancellation across all operations.
+- **Development audit logging** — `--dev --log-dir` mode with `operations.jsonl` and `metrics.json`.
+- **Log inspection tools** — `cmd/logview`, `cmd/logdashboard`, and local dashboard.
+
+### Changed
+- **Tool descriptions rewritten for discoverability** — action keywords, recommended workflows, reduced cross-reference noise. Optimized for Claude Desktop's semantic tool search.
+- **Tool errors** — `IsError: true` (tool-level) instead of protocol-level errors.
+- **Output sanitization** — 1MB truncation and UTF-8 validation in post-processing.
+
+---
+
 ## [1.0.0] - 2026-03-23
 
 ### Added

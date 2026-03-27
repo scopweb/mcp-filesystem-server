@@ -5,15 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Added
-- **`/filesystem-light-tools` skill** — Claude Code skill (`.claude/skills/filesystem-light-tools/`) that instructs the AI to call the `help` tool at the start of a conversation. Solves Claude Desktop's lazy tool loading problem: without this, only ~5 of 19 tools are discovered per query. The skill ships with the repo so anyone who clones it gets it automatically.
-- **`help` tool** — returns the full catalog of 19 tools with usage rules, parameters, and best practices. Description is keyword-rich (read, write, edit, list, search, copy, move, delete, compare, batch, analyze, tree, stats, media, chunks, duplicates, plan) so Claude Desktop's semantic search picks it up for virtually any filesystem query.
+- **Official MCP compatibility aliases** — 3 tool name aliases for clients trained on the official `modelcontextprotocol/servers` filesystem server: `read_text_file` → `read_file`, `search_files` → `search`, `directory_tree` → `tree`. Full parameter schemas, same handlers.
+- **Recommended workflow in instructions** — `serverInstructions` now includes a 5-step workflow (navigate → locate → read range → edit → verify) sent during MCP initialize.
+- **`edit_file` large-edit tip** — success message includes a TIP to use `compare_files` when edits affect >10 lines.
+- **`/filesystem-light-tools` skill** — Claude Code skill (`.claude/skills/filesystem-light-tools/`) that instructs the AI to call the `help` tool at the start of a conversation. Solves Claude Desktop's lazy tool loading problem: without this, only ~5 of 18 tools are discovered per query. The skill ships with the repo so anyone who clones it gets it automatically.
+- **`help` tool** — returns the full catalog of 18 tools with usage rules, parameters, and best practices. Description is keyword-rich so Claude Desktop's semantic search picks it up for virtually any filesystem query.
 - **`server.WithInstructions()`** — sends tool catalog during MCP initialize handshake (spec 2025-11-25 compliant). Works with clients that support the `instructions` field; Claude Desktop currently ignores it.
 - **`read_file` outline mode** — new `outline` boolean param. Returns a symbol index (functions, classes, types, interfaces with line numbers) using regex extraction for 14 languages: Go, JS, TS, Python, C#, Java, Rust, PHP, Ruby, Swift, Kotlin, C, C++, CSS.
 - **`list_directory` depth** — new `depth` param (1-10). Enables multi-level recursive directory listing without using `tree`.
 - **MCP logging capability** — `server.WithLogging()` enabled. Handler can send `notifications/message` log events to clients.
 - **Progress notifications** — `batch_operations` and `read_multiple_files` send progress updates via `notifications/progress`.
 - **Content annotations** — read tools annotate output with `audience: ["assistant"]`, write tools with `audience: ["user", "assistant"]`.
-- **Tool title annotations** — all 19 tools have `WithTitleAnnotation()` for better client UI display.
+- **Tool title annotations** — all tools have `WithTitleAnnotation()` for better client UI display.
 - **Roots change notifications** — handler listens for `notifications/roots/list_changed` and refreshes allowed directories mid-session.
 - **Context cancellation** — all `filepath.Walk` operations, line scanners, and batch loops check `ctx.Done()` for cooperative cancellation.
 - **Development audit logging** — new `--dev --log-dir <dir>` mode writes `operations.jsonl` and `metrics.json` for local observability without affecting normal stdio MCP transport.
@@ -21,6 +24,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Optional proxy correlation** — new `cmd/proxy` can inject and persist correlated `request_id` traces in `proxy.jsonl` for end-to-end debugging.
 
 ### Changed
+- **Tool descriptions rewritten for discoverability** — descriptions now include action keywords (TEXT REPLACEMENT, FIND AND REPLACE, PATCH), recommended workflows, and reduced noise in cross-references. Optimized for Claude Desktop's semantic tool search.
 - **Tool execution errors** — converted `return nil, fmt.Errorf(...)` to `toolError(...)` / `toolErrorf(...)` across all handlers. Tool errors now use `IsError: true` (tool-level) instead of protocol-level errors, per MCP spec.
 - **Resource capabilities** — changed from `WithResourceCapabilities(true, true)` to `(false, false)` to avoid overcommitting capabilities the server doesn't implement.
 - **Output sanitization** — `sanitizeOutput` (1MB truncation, UTF-8 validation) integrated into `withNormalize` post-processing.

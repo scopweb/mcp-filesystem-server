@@ -194,12 +194,17 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		backupPath = ""
 	}
 
+	successMsg := fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s)\n🎯 Match confidence: %s\n📝 Lines affected: %d",
+		path, result.ReplacementCount, result.MatchConfidence, result.LinesAffected)
+	if result.LinesAffected > 10 {
+		successMsg += "\n💡 TIP: Use compare_files to verify large edits"
+	}
+
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.TextContent{
 				Type: "text",
-				Text: fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s)\n🎯 Match confidence: %s\n📝 Lines affected: %d",
-					path, result.ReplacementCount, result.MatchConfidence, result.LinesAffected),
+				Text: successMsg,
 			},
 			mcp.EmbeddedResource{
 				Type: "resource",

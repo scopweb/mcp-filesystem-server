@@ -1,6 +1,6 @@
 ---
 title: Tools Reference
-description: All 18 tools available in MCP Filesystem Server.
+description: All 18 tools + 3 compatibility aliases available in MCP Filesystem Server.
 ---
 
 ## File Operations
@@ -14,9 +14,11 @@ Read the complete contents of a file, or a specific line range.
 | `path` | string | Yes | Path to the file |
 | `start_line` | number | No | First line to read (1-based, inclusive) |
 | `end_line` | number | No | Last line to read (1-based, inclusive) |
+| `outline` | boolean | No | Return a symbol index (functions, classes, types with line numbers) instead of file contents |
 
 :::tip
-When `start_line`/`end_line` are set, the 5 MB inline limit is bypassed — ideal for reading a function or section from a large file without loading it entirely.
+- Use `outline=true` **first** to get a symbol map, then `start_line/end_line` to read only the range you need.
+- When `start_line`/`end_line` are set, the 5 MB inline limit is bypassed — ideal for reading a function or section from a large file without loading it entirely.
 :::
 
 ### `write_file`
@@ -101,11 +103,12 @@ Get file or directory metadata (size, permissions, timestamps).
 
 ### `list_directory`
 
-List the immediate contents of a single directory (one level, no recursion). Prefer this over `tree` or `search_files` when you only need what is directly inside a folder — faster and token-efficient.
+List directory contents with optional depth. Prefer this over `tree` or `search` when you only need what is directly inside a folder — faster and token-efficient.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | Yes | Directory path |
+| `depth` | number | No | How many levels deep to list (default: 1, max: 10) |
 
 ### `create_directory`
 
@@ -193,3 +196,15 @@ Create step-by-step execution plans for complex operations.
 | `description` | string | Yes | Task description |
 | `target_files` | array | No | Files to modify |
 | `workspace` | string | No | Workspace path |
+
+## Official MCP Compatibility Aliases
+
+For clients trained on the [official MCP filesystem server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem), these aliases are registered with identical parameter schemas and the same handlers:
+
+| Official name | Resolves to | Description |
+|---------------|-------------|-------------|
+| `read_text_file` | `read_file` | Read file contents |
+| `search_files` | `search` | Unified search |
+| `directory_tree` | `tree` | Hierarchical directory tree |
+
+Both names work — use whichever your client expects.
