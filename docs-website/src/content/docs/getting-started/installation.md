@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install and configure MCP Filesystem Server.
+description: Install and configure MCP Filesystem Light.
 ---
 
 ## Prerequisites

@@ -20,7 +20,7 @@ export default defineConfig({
 					},
 				},
 			],
-			title: 'MCP Filesystem Server',
+			title: 'MCP Filesystem Light',
 			description: 'Lightweight MCP filesystem server for Claude Desktop with normalizer intelligence',
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/scopweb/mcp-filesystem-go-light' },

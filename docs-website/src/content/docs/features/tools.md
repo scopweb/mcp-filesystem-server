@@ -1,6 +1,6 @@
 ---
 title: Tools Reference
-description: All 18 tools + 3 compatibility aliases available in MCP Filesystem Server.
+description: All 18 tools + 3 compatibility aliases available in MCP Filesystem Light.
 ---
 
 ## File Operations

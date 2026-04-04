@@ -1,6 +1,6 @@
 ---
 title: Claude Desktop Setup
-description: Configure MCP Filesystem Server for Claude Desktop.
+description: Configure MCP Filesystem Light for Claude Desktop.
 ---
 
 ## Configuration

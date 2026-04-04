@@ -1,6 +1,6 @@
 ---
 title: Changelog
-description: Version history for MCP Filesystem Server.
+description: Version history for MCP Filesystem Light.
 ---
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).

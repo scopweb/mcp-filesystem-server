@@ -1,6 +1,6 @@
 ---
 title: vs Ultra
-description: Comparison between MCP Filesystem Server and the full-featured ultra edition.
+description: Comparison between MCP Filesystem Light and the full-featured ultra edition.
 ---
 
 ## Feature Comparison
