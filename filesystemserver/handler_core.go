@@ -505,6 +505,17 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		return toolError("content must be a string")
 	}
 
+	// base64 decode if encoding param is set
+	encoding, _ := request.GetArguments()["encoding"].(string)
+	var rawBytes []byte
+	if encoding == "base64" {
+		decoded, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return toolError(fmt.Sprintf("invalid base64 content: %v", err))
+		}
+		rawBytes = decoded
+	}
+
 	if path == "." || path == "./" {
 		appendSubOperation(ctx, "write.resolve_cwd")
 		cwd, err := os.Getwd()
@@ -632,7 +643,12 @@ func (fs *FilesystemHandler) handleWriteFile(ctx context.Context, request mcp.Ca
 		}, nil
 	}
 	tmpPath := tmpFile.Name()
-	_, writeErr := tmpFile.WriteString(content)
+	var writeErr error
+	if rawBytes != nil {
+		_, writeErr = tmpFile.Write(rawBytes)
+	} else {
+		_, writeErr = tmpFile.WriteString(content)
+	}
 	closeErr := tmpFile.Close()
 	if writeErr != nil || closeErr != nil {
 		os.Remove(tmpPath)

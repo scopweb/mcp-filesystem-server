@@ -94,18 +94,9 @@ func (fs *FilesystemHandler) handleTree(ctx context.Context, request mcp.CallToo
 		}, nil
 	}
 
-	resourceURI := pathToResourceURI(validPath)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.TextContent{Type: "text", Text: fmt.Sprintf("Directory tree for %s (max depth: %d):\n\n%s", validPath, depth, string(jsonData))},
-			mcp.EmbeddedResource{
-				Type: "resource",
-				Resource: mcp.TextResourceContents{
-					URI:      resourceURI,
-					MIMEType: "application/json",
-					Text:     string(jsonData),
-				},
-			},
 		},
 	}, nil
 }

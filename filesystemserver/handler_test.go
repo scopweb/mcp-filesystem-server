@@ -2,6 +2,7 @@ package filesystemserver
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -551,4 +552,89 @@ func TestReadfile_Outline_NoSymbols(t *testing.T) {
 	require.NoError(t, err)
 	text := result.Content[0].(mcp.TextContent).Text
 	assert.Contains(t, text, "No symbols found")
+}
+
+// TestWriteFile_Base64 verifica que write_file decodifica correctament base64
+func TestWriteFile_Base64(t *testing.T) {
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	// PNG mínim de 2x2 píxels (binari real)
+	pngBytes := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+		0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+		0x08, 0x02, 0x00, 0x00, 0x00, 0xfd, 0xd4, 0x9a,
+		0x73, 0x00, 0x00, 0x00, 0x01, 0x73, 0x52, 0x47, // sRGB
+		0x42, 0x00, 0xae, 0xce, 0x1c, 0xe9,
+	}
+	encoded := base64.StdEncoding.EncodeToString(pngBytes)
+	outPath := filepath.Join(dir, "test.png")
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "write_file"
+	request.Params.Arguments = map[string]any{
+		"path":     outPath,
+		"content":  encoded,
+		"encoding": "base64",
+	}
+
+	result, err := handler.handleWriteFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.False(t, result.IsError, "esperava èxit, got: %v", result.Content)
+
+	// Verificar que el fitxer conté els bytes binaris, no el text base64
+	written, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, pngBytes, written, "el fitxer hauria de contenir bytes binaris, no text base64")
+	assert.NotEqual(t, []byte(encoded), written, "el fitxer NO hauria de contenir el text base64 literal")
+}
+
+// TestWriteFile_Base64_InvalidInput verifica que base64 invàlid retorna error
+func TestWriteFile_Base64_InvalidInput(t *testing.T) {
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "write_file"
+	request.Params.Arguments = map[string]any{
+		"path":     filepath.Join(dir, "test.bin"),
+		"content":  "això no és base64 vàlid!!!",
+		"encoding": "base64",
+	}
+
+	result, err := handler.handleWriteFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.True(t, result.IsError, "esperava error per base64 invàlid")
+	assert.Contains(t, fmt.Sprint(result.Content[0]), "invalid base64")
+}
+
+// TestTree_NoDuplicateContent verifica que tree no retorna JSON duplicat
+func TestTree_NoDuplicateContent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("x"), 0644))
+
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "tree"
+	request.Params.Arguments = map[string]any{
+		"path":  dir,
+		"depth": float64(2),
+	}
+
+	result, err := handler.handleTree(context.Background(), request)
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+
+	// Ha de retornar exactament 1 content item
+	assert.Len(t, result.Content, 1, "tree ha de retornar exactament 1 content item, no duplicat")
+
+	text := result.Content[0].(mcp.TextContent).Text
+	assert.Contains(t, text, "Directory tree for")
+	assert.Contains(t, text, "file.txt")
 }
