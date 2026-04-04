@@ -7,7 +7,7 @@ MCP server that provides filesystem access to Claude Desktop and other LLM clien
 ## Install
 
 ```bash
-go install github.com/scopweb/mcp-filesystem-server@latest
+go install github.com/scopweb/mcp-filesystem-go-light@latest
 ```
 
 ## Configure
@@ -18,7 +18,7 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "filesystem": {
-      "command": "mcp-filesystem-server",
+      "command": "mcp-filesystem-go-light",
       "args": ["/path/to/allowed/dir", "/another/dir"]
     }
   }
@@ -31,7 +31,7 @@ On Windows, you can point directly to the `.exe`:
 {
   "mcpServers": {
     "filesystem": {
-      "command": "C:\\path\\to\\mcp-filesystem-server.exe",
+      "command": "C:\\path\\to\\mcp-filesystem-go-light.exe",
       "args": ["C:\\Users\\you\\projects", "C:\\another\\dir"]
     }
   }
@@ -41,7 +41,7 @@ On Windows, you can point directly to the `.exe`:
 Docker:
 
 ```bash
-docker pull ghcr.io/scopweb/mcp-filesystem-server:latest
+docker pull ghcr.io/scopweb/mcp-filesystem-go-light:latest
 ```
 
 ## Tool Discovery

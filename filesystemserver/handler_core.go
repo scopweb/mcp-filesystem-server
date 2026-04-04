@@ -191,6 +191,29 @@ func (fs *FilesystemHandler) validatePath(requestedPath string) (string, error) 
 	return realPath, nil
 }
 
+// isAllowedDir checks if a path IS one of the allowed directories themselves.
+// Used to prevent destructive operations (delete, move) on allowed roots.
+func (fs *FilesystemHandler) isAllowedDir(path string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	if !strings.HasSuffix(absPath, string(filepath.Separator)) {
+		absPath = absPath + string(filepath.Separator)
+	}
+
+	fs.mu.RLock()
+	dirs := fs.allowedDirs
+	fs.mu.RUnlock()
+
+	for _, dir := range dirs {
+		if absPath == dir {
+			return true
+		}
+	}
+	return false
+}
+
 // isPathInAllowedDirs checks if a path is within any allowed directory
 func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 	absPath, err := filepath.Abs(path)
@@ -882,6 +905,16 @@ func (fs *FilesystemHandler) handleDeleteFile(ctx context.Context, request mcp.C
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: %v", err)},
+			},
+			IsError: true,
+		}, nil
+	}
+
+	// Protect allowed directories from deletion
+	if fs.isAllowedDir(validPath) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: cannot delete allowed directory %s — this is a protected root path", path)},
 			},
 			IsError: true,
 		}, nil

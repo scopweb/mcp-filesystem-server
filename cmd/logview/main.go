@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scopweb/mcp-filesystem-server/internal/logview"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/logview"
 )
 
 func main() {

@@ -23,7 +23,7 @@ export default defineConfig({
 			title: 'MCP Filesystem Server',
 			description: 'Lightweight MCP filesystem server for Claude Desktop with normalizer intelligence',
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/scopweb/mcp-filesystem-server' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/scopweb/mcp-filesystem-go-light' },
 				{ icon: 'external', label: 'scopweb.com', href: 'https://scopweb.com' },
 			],
 			defaultLocale: 'root',

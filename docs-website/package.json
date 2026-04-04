@@ -1,5 +1,5 @@
 {
-  "name": "mcp-filesystem-server-docs",
+  "name": "mcp-filesystem-go-light-docs",
   "type": "module",
   "version": "0.0.1",
   "scripts": {

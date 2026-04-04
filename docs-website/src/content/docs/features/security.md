@@ -33,7 +33,7 @@ If any check fails, the operation is rejected before touching the filesystem.
 Allowed directories are passed as command-line arguments at startup:
 
 ```bash
-mcp-filesystem-server /home/user/projects /tmp/scratch
+mcp-filesystem-go-light /home/user/projects /tmp/scratch
 ```
 
 ### MCP Roots
@@ -43,7 +43,7 @@ The server declares the `roots` capability. If the MCP client provides roots via
 The server can start with no CLI arguments and rely entirely on roots from the client:
 
 ```bash
-mcp-filesystem-server   # roots will be provided by the client
+mcp-filesystem-go-light   # roots will be provided by the client
 ```
 
 Only the resulting merged list of directories (and their subdirectories) is accessible. Everything else is denied.

@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/scopweb/mcp-filesystem-server/filesystemserver"
+	"github.com/scopweb/mcp-filesystem-go-light/filesystemserver"
 )
 
 func main() {

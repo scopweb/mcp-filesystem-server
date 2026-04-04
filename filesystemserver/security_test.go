@@ -806,7 +806,7 @@ func TestEditFile_LargeEditTip(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	text := result.Content[0].(mcp.TextContent).Text
-	assert.Contains(t, text, "compare_files")
+	assert.Contains(t, text, "Lines affected: 20")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -860,5 +860,82 @@ func TestMoveFile_DestOutsideAllowed(t *testing.T) {
 
 	// Verify original file still exists
 	_, statErr := os.Stat(srcFile)
+	assert.NoError(t, statErr)
+}
+
+// ─────────────────��─────────────────────────────────────────���─────────────────
+// Protected allowed directories — cannot delete or move root paths
+// ───────���─────────────────��───────────────────────────────────────────────────
+
+func TestDeleteFile_CannotDeleteAllowedDir(t *testing.T) {
+	allowed := t.TempDir()
+
+	handler, err := NewFilesystemHandler([]string{allowed})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "delete_file"
+	request.Params.Arguments = map[string]any{
+		"path":      allowed,
+		"recursive": true,
+	}
+
+	result, err := handler.handleDeleteFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, fmt.Sprint(result.Content[0]), "protected root path")
+
+	// Verify directory still exists
+	_, statErr := os.Stat(allowed)
+	assert.NoError(t, statErr)
+}
+
+func TestMoveFile_CannotMoveAllowedDir(t *testing.T) {
+	allowed := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "moved")
+
+	handler, err := NewFilesystemHandler([]string{allowed, filepath.Dir(dest)})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "move_file"
+	request.Params.Arguments = map[string]any{
+		"source":      allowed,
+		"destination": dest,
+	}
+
+	result, err := handler.handleMoveFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, fmt.Sprint(result.Content[0]), "protected root path")
+
+	// Verify directory still exists
+	_, statErr := os.Stat(allowed)
+	assert.NoError(t, statErr)
+}
+
+func TestDeleteFile_CanDeleteSubdirOfAllowed(t *testing.T) {
+	allowed := t.TempDir()
+	subdir := filepath.Join(allowed, "subdir")
+	require.NoError(t, os.MkdirAll(subdir, 0755))
+
+	handler, err := NewFilesystemHandler([]string{allowed})
+	require.NoError(t, err)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = "delete_file"
+	request.Params.Arguments = map[string]any{
+		"path":      subdir,
+		"recursive": true,
+	}
+
+	result, err := handler.handleDeleteFile(context.Background(), request)
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+
+	// Verify subdir deleted but allowed dir still exists
+	_, statErr := os.Stat(subdir)
+	assert.True(t, os.IsNotExist(statErr))
+	_, statErr = os.Stat(allowed)
 	assert.NoError(t, statErr)
 }

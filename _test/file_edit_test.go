@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/scopweb/mcp-filesystem-server/filesystemserver"
+	"github.com/scopweb/mcp-filesystem-go-light/filesystemserver"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -100,13 +100,13 @@ func TestFileEdits(t *testing.T) {
 func TestMain(m *testing.M) {
 	// Código de configuración previa a las pruebas
 	fmt.Println("Setting up tests...")
-	
+
 	// Ejecutar las pruebas
 	exitCode := m.Run()
-	
+
 	// Código de limpieza posterior a las pruebas
 	fmt.Println("Tests completed")
-	
+
 	// Salir con el código de salida de las pruebas
 	os.Exit(exitCode)
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/scopweb/mcp-filesystem-server/filesystemserver"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/scopweb/mcp-filesystem-go-light/filesystemserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

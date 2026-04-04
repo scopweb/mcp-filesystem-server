@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scopweb/mcp-filesystem-server/internal/dashboardapi"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/dashboardapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

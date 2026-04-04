@@ -10,12 +10,12 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var Version = "1.0.0"
+var Version = "1.1.0"
 
 // serverInstructions is sent to the client during the MCP initialize handshake.
 // It ensures the AI model knows ALL available tools from the start, not just the
 // ones it happens to discover on its own.
-const serverInstructions = `You have access to a full-featured filesystem server with 18 tools (+ 3 compatibility aliases). Use the RIGHT tool for each task:
+const serverInstructions = `You have access to a full-featured filesystem server with 18 tools. Use the RIGHT tool for each task:
 
 ## Editing files (IMPORTANT)
 - **edit_file**: Modify specific text in a file (search/replace). Supports dry_run preview. ALWAYS prefer this over write_file for existing files.
@@ -29,7 +29,7 @@ const serverInstructions = `You have access to a full-featured filesystem server
 ## File operations
 - **copy_file**: Copy files or directories.
 - **move_file**: Move or rename files and directories.
-- **delete_file**: Delete files or directories (supports recursive=true).
+- **delete_file**: Delete files or directories (supports recursive=true). Cannot delete allowed root directories.
 
 ## Directory operations
 - **list_directory**: List directory contents. Use depth=N (1-10) for multi-level listing.
@@ -49,19 +49,11 @@ const serverInstructions = `You have access to a full-featured filesystem server
 ## System
 - **list_allowed_directories**: Show which directories the server can access.
 
-## Recommended workflow
-1. **Navigate** → read_file(outline=true) to get symbol map with line numbers
-2. **Locate** → search(mode=content, context_lines=3) to find exact blocks
-3. **Read range** → read_file(start_line/end_line) for precise context
-4. **Edit** → edit_file (NOT write_file) for modifications
-5. **Verify** → compare_files after large edits (>10 lines)
-
 ## Key rules
 1. To modify existing files: use edit_file, NOT write_file
 2. To explore large files: use read_file with outline=true first, then read_file with start_line/end_line for specific sections
 3. To search file contents: use search with mode=content and include_content=true
-4. For bulk renames/deletes: use batch_operations, not individual calls
-5. After large edits: use compare_files to verify the result`
+4. For bulk renames/deletes: use batch_operations, not individual calls`
 
 func NewFilesystemServer(allowedDirs []string) (*server.MCPServer, error) {
 	s, _, err := NewFilesystemServerWithOptions(allowedDirs)
@@ -166,7 +158,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"read_file",
 		mcp.WithTitleAnnotation("Read File"),
-		mcp.WithDescription("Read file contents. RECOMMENDED: use outline=true FIRST to get a symbol map (functions, classes, types with line numbers) — then read only the range you need with start_line/end_line. To MODIFY files use the edit tool (not write_file). Other tools: search (mode=content for grep), compare_files, list_directory, tree, analyze_project."),
+		mcp.WithDescription("Read file contents. Use start_line/end_line for reading specific ranges. "+
+			"Use outline=true to get a symbol index (functions, classes, types with line numbers) — "+
+			"ideal for navigating large files before reading specific sections. To MODIFY files use edit_file."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -187,7 +181,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"write_file",
 		mcp.WithTitleAnnotation("Write File"),
-		mcp.WithDescription("Create NEW files or full overwrite. For modifying existing files use the edit tool instead (search/replace with dry_run). Other tools: read_file, copy_file, move_file, delete_file, batch_operations."),
+		mcp.WithDescription("Create NEW files or full overwrite. Supports chunked streaming for large files "+
+			"(set chunk_index + total_chunks). Use create_backup:true to save a .backup copy before overwriting. "+
+			"For modifying existing files ALWAYS use edit_file instead."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path",
@@ -212,7 +208,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"edit_file",
 		mcp.WithTitleAnnotation("Edit File"),
-		mcp.WithDescription("TEXT REPLACEMENT / FIND AND REPLACE / PATCH existing files. Uses old_text→new_text to modify code. Supports dry_run preview. ALWAYS use this (not write_file) to change existing files. TIP: after large edits use compare_files to verify. Best workflow: search → read_file(start_line/end_line) → edit_file. Related: read_file (outline=true), search (mode=content), compare_files, batch_operations."),
+		mcp.WithDescription("Modify existing files by replacing specific text (search → replace). "+
+			"Use dry_run:true to preview changes as a unified diff before applying. "+
+			"ALWAYS prefer this over write_file for existing files."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path",
@@ -235,7 +233,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"copy_file",
 		mcp.WithTitleAnnotation("Copy File"),
-		mcp.WithDescription("Copy files and directories. Other tools: move_file (rename), delete_file, batch_operations (bulk ops)."),
+		mcp.WithDescription("Copy files or directories to a new location. Supports recursive directory copy."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("source",
@@ -251,7 +249,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"move_file",
 		mcp.WithTitleAnnotation("Move / Rename"),
-		mcp.WithDescription("Move or rename files and directories. Other tools: copy_file, delete_file, batch_operations (bulk ops)."),
+		mcp.WithDescription("Move or rename files and directories. Works as both move and rename. Cannot move allowed root directories."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("source",
@@ -267,7 +265,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"delete_file",
 		mcp.WithTitleAnnotation("Delete File"),
-		mcp.WithDescription("Delete files or directories (supports recursive). Other tools: copy_file, move_file, batch_operations (bulk delete/rename/copy)."),
+		mcp.WithDescription("Delete files or directories. Use recursive:true for non-empty directories. Cannot delete allowed root directories."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path",
@@ -282,7 +280,8 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"list_directory",
 		mcp.WithTitleAnnotation("List Directory"),
-		mcp.WithDescription("List directory contents with optional depth (1-10). Other tools: tree (hierarchical JSON), read_file, search, create_directory, analyze_project."),
+		mcp.WithDescription("List directory contents with file sizes and types. Use depth:N (1-10) for multi-level listing. "+
+			"For hierarchical JSON output use the tree tool instead."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -297,7 +296,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"create_directory",
 		mcp.WithTitleAnnotation("Create Directory"),
-		mcp.WithDescription("Create directories (recursive). Other tools: list_directory, tree, write_file (create files), delete_file, batch_operations."),
+		mcp.WithDescription("Create directories recursively (like mkdir -p). Creates all intermediate directories. Idempotent."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -309,7 +308,8 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"tree",
 		mcp.WithTitleAnnotation("Directory Tree"),
-		mcp.WithDescription("Hierarchical JSON tree of directory structure. Other tools: list_directory (flat listing), search, read_file, analyze_project."),
+		mcp.WithDescription("Hierarchical JSON tree of directory structure with configurable depth. "+
+			"Use follow_symlinks:true to traverse symbolic links. For flat listing use list_directory."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -327,7 +327,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"search",
 		mcp.WithTitleAnnotation("Search Files"),
-		mcp.WithDescription("Unified search. mode=files: find by name/glob; mode=content: regex search in file contents (like grep -C N); mode=duplicates: find duplicate files by hash. Other tools: read_file (outline=true), compare_files, analyze_project, batch_operations."),
+		mcp.WithDescription("Unified search with three modes. mode=files: find files by name/glob pattern. "+
+			"mode=content: regex search inside file contents (like grep), use context_lines for surrounding lines "+
+			"and file_types:[\".go\",\".ts\"] to filter. mode=duplicates: find duplicate files by content hash."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -354,7 +356,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"get_file_info",
 		mcp.WithTitleAnnotation("File Info"),
-		mcp.WithDescription("File/directory metadata (size, permissions, dates). Other tools: read_file, search, compare_files, analyze_project."),
+		mcp.WithDescription("File/directory metadata: size, permissions, timestamps, type. Quick way to check existence and properties."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -366,7 +368,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"list_allowed_directories",
 		mcp.WithTitleAnnotation("Allowed Directories"),
-		mcp.WithDescription("Show allowed directories this server can access. Other tools: read_file, search, list_directory, tree, analyze_project."),
+		mcp.WithDescription("Show which directories this server is allowed to access. Call to verify permissions before operations."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 	), h.withAudit("list_allowed_directories", h.handleListAllowedDirectories))
@@ -374,7 +376,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"read_multiple_files",
 		mcp.WithTitleAnnotation("Read Multiple Files"),
-		mcp.WithDescription("Read multiple files in one call. Other tools: search (mode=content for grep), compare_files, batch_operations, analyze_project."),
+		mcp.WithDescription("Read multiple files in one call. More efficient than sequential read_file calls when you need several files at once."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithArray("paths",
@@ -386,7 +388,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"read_media_file",
 		mcp.WithTitleAnnotation("Read Media File"),
-		mcp.WithDescription("Read images/binary files as base64 or ImageContent. Other tools: read_file (text), search, compare_files, batch_operations."),
+		mcp.WithDescription("Read images and binary files. Returns base64 data or ImageContent for supported image formats (png, jpg, gif, webp)."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -398,7 +400,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"analyze_project",
 		mcp.WithTitleAnnotation("Analyze Project"),
-		mcp.WithDescription("Full project analysis: languages, file types, structure, patterns. Other tools: tree, search, read_file (outline=true), compare_files."),
+		mcp.WithDescription("Full project structure analysis: language detection, file type distribution, "+
+			"directory layout, code metrics and patterns. Scans entire project tree to identify "+
+			"languages, frameworks, build systems, and file organization."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("path",
@@ -410,7 +414,7 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"compare_files",
 		mcp.WithTitleAnnotation("Compare Files"),
-		mcp.WithDescription("Compare two files with diff (unified/context/side-by-side). RECOMMENDED after large edit operations to verify changes. Other tools: search (find content), read_file (outline=true), analyze_project."),
+		mcp.WithDescription("Diff two files. Formats: unified (default, like git diff), context (with surrounding lines), side-by-side (parallel comparison)."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("file1",
@@ -429,7 +433,8 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"batch_operations",
 		mcp.WithTitleAnnotation("Batch Operations"),
-		mcp.WithDescription("Bulk file operations (rename, delete, copy) in one call. Other tools: search, compare_files, read_file, analyze_project."),
+		mcp.WithDescription("Bulk file operations in one call. Pass an array of operations, each with type (rename, delete, copy), "+
+			"from and to paths. More efficient than individual calls for bulk renames, deletes, or copies."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithArray("operations",
@@ -441,7 +446,9 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 	s.AddTool(mcp.NewTool(
 		"plan_task",
 		mcp.WithTitleAnnotation("Plan Task"),
-		mcp.WithDescription("Create step-by-step plan for complex file operations. Other tools: batch_operations (execute bulk), search, compare_files, analyze_project."),
+		mcp.WithDescription("Create a step-by-step execution plan for complex file operations. "+
+			"Analyzes target files and workspace to recommend which tools to use and in what order. "+
+			"Use before batch_operations for complex multi-file tasks."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("description",
@@ -456,83 +463,12 @@ func NewFilesystemServerWithOptions(allowedDirs []string, options ...ServerOptio
 		),
 	), h.withNormalize("plan_task", h.handlePlanTask))
 
-	// ── Official MCP server compatibility aliases ──────────────────────────
-	// The official modelcontextprotocol/servers filesystem uses different tool
-	// names. Register aliases so clients trained on the official server find
-	// our tools without friction.
-
-	s.AddTool(mcp.NewTool(
-		"read_text_file",
-		mcp.WithTitleAnnotation("Read File (alias)"),
-		mcp.WithDescription("Alias for read_file — compatibility with the official MCP filesystem server. Read file contents. Use outline=true for symbol map, start_line/end_line for ranges."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path to the file to read"),
-			mcp.Required(),
-		),
-		mcp.WithNumber("start_line",
-			mcp.Description("First line to read, 1-based inclusive (optional)"),
-		),
-		mcp.WithNumber("end_line",
-			mcp.Description("Last line to read, 1-based inclusive (optional)"),
-		),
-		mcp.WithBoolean("outline",
-			mcp.Description("Return a structured symbol outline instead of file contents"),
-		),
-	), h.withNormalize("read_file", h.handleReadFile))
-
-	s.AddTool(mcp.NewTool(
-		"search_files",
-		mcp.WithTitleAnnotation("Search Files (alias)"),
-		mcp.WithDescription("Alias for search — compatibility with the official MCP filesystem server. Unified search: mode=files (name/glob), mode=content (regex grep), mode=duplicates (hash)."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Starting directory for the search"),
-			mcp.Required(),
-		),
-		mcp.WithString("mode",
-			mcp.Description("Search mode: 'files' (default), 'content', or 'duplicates'"),
-		),
-		mcp.WithString("pattern",
-			mcp.Description("Filename glob or content regex"),
-		),
-		mcp.WithBoolean("include_content",
-			mcp.Description("(content mode) Search within file contents. Default: true."),
-		),
-		mcp.WithArray("file_types",
-			mcp.Description("(content mode) Filter by extension, e.g. ['.go', '.js']"),
-		),
-		mcp.WithNumber("context_lines",
-			mcp.Description("(content mode) Lines before/after each match. Default: 0."),
-		),
-	), h.withNormalize("search", h.handleSearch))
-
-	s.AddTool(mcp.NewTool(
-		"directory_tree",
-		mcp.WithTitleAnnotation("Directory Tree (alias)"),
-		mcp.WithDescription("Alias for tree — compatibility with the official MCP filesystem server. Hierarchical JSON tree of directory structure."),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithString("path",
-			mcp.Description("Path of the directory to traverse"),
-			mcp.Required(),
-		),
-		mcp.WithNumber("depth",
-			mcp.Description("Maximum depth to traverse (default: 3)"),
-		),
-		mcp.WithBoolean("follow_symlinks",
-			mcp.Description("Whether to follow symbolic links (default: false)"),
-		),
-	), h.withNormalize("tree", h.handleTree))
-
-	// ── Help ────────────────────────────────────────────────────────────────
-
 	s.AddTool(mcp.NewTool(
 		"help",
 		mcp.WithTitleAnnotation("Server Help"),
-		mcp.WithDescription("IMPORTANT: Call this tool FIRST in every conversation. Returns the complete catalog of 19 filesystem tools (read, write, edit, list, search, copy, move, delete, compare, batch, analyze, tree, stats, media, chunks, duplicates, plan) with usage rules, best practices and parameter details. Without calling help first you will miss most available tools."),
+		mcp.WithDescription("Call FIRST in every conversation. Returns the complete catalog of all filesystem tools "+
+			"(read, write, edit, search, copy, move, delete, compare, batch, analyze, tree, plan, media) "+
+			"with usage rules and best practices. Without calling help first you may miss available tools."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 	), h.withAudit("help", func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

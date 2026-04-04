@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -82,44 +80,12 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		return editFileErrorResult(fmt.Sprintf("error reading file: %v", err))
 	}
 
-	// Internal timeout to prevent Claude Desktop 4-minute timeout kills.
-	// analyzeContent + performIntelligentEdit can be slow on large files.
-	const editTimeout = 2 * time.Minute
-	type editResult struct {
-		result *EditResult
-		err    error
-	}
-	editCh := make(chan editResult, 1)
-	go func() {
-		analysis := fs.analyzeContent(string(content), oldText)
-		r, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
-		editCh <- editResult{r, err}
-	}()
-
-	appendSubOperation(ctx, "edit.analyze_and_replace")
-	var result *EditResult
-	if ctx != nil {
-		select {
-		case er := <-editCh:
-			if er.err != nil {
-				return editFileErrorResult(er.err.Error())
-			}
-			result = er.result
-		case <-time.After(editTimeout):
-			return editFileErrorResult(fmt.Sprintf("edit timed out after %s — file may be too large for intelligent matching. Try a more specific old_text or split into smaller edits.", editTimeout))
-		case <-ctx.Done():
-			return editFileErrorResult(fmt.Sprintf("edit cancelled: %v", ctx.Err()))
-		}
-	} else {
-		select {
-		case er := <-editCh:
-			if er.err != nil {
-				return editFileErrorResult(er.err.Error())
-			}
-			result = er.result
-		case <-time.After(editTimeout):
-			return editFileErrorResult(fmt.Sprintf("edit timed out after %s — file may be too large for intelligent matching. Try a more specific old_text or split into smaller edits.", editTimeout))
-		}
+	appendSubOperation(ctx, "edit.analyze_content")
+	analysis := fs.analyzeContent(string(content), oldText)
+	appendSubOperation(ctx, "edit.compute_replacement")
+	result, err := fs.performIntelligentEdit(string(content), oldText, newText, analysis)
+	if err != nil {
+		return editFileErrorResult(err.Error())
 	}
 	appendSubOperation(ctx, "edit.match_confidence."+result.MatchConfidence)
 
@@ -194,17 +160,12 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		backupPath = ""
 	}
 
-	successMsg := fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s)\n🎯 Match confidence: %s\n📝 Lines affected: %d",
-		path, result.ReplacementCount, result.MatchConfidence, result.LinesAffected)
-	if result.LinesAffected > 10 {
-		successMsg += "\n💡 TIP: Use compare_files to verify large edits"
-	}
-
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.TextContent{
 				Type: "text",
-				Text: successMsg,
+				Text: fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s)\n🎯 Match confidence: %s\n📝 Lines affected: %d",
+					path, result.ReplacementCount, result.MatchConfidence, result.LinesAffected),
 			},
 			mcp.EmbeddedResource{
 				Type: "resource",

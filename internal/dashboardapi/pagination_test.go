@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/scopweb/mcp-filesystem-server/internal/logview"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/logview"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

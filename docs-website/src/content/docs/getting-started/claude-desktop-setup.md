@@ -13,7 +13,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "filesystem": {
-      "command": "mcp-filesystem-server",
+      "command": "mcp-filesystem-go-light",
       "args": ["/path/to/allowed/dir", "/another/dir"]
     }
   }
@@ -26,7 +26,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "filesystem": {
-      "command": "C:\\path\\to\\mcp-filesystem-server.exe",
+      "command": "C:\\path\\to\\mcp-filesystem-go-light.exe",
       "args": ["C:\\Users\\you\\projects", "C:\\another\\dir"]
     }
   }
@@ -43,7 +43,7 @@ Add to your `claude_desktop_config.json`:
       "args": [
         "run", "-i", "--rm",
         "-v", "/your/path:/data",
-        "ghcr.io/scopweb/mcp-filesystem-server:latest",
+        "ghcr.io/scopweb/mcp-filesystem-go-light:latest",
         "/data"
       ]
     }
@@ -66,7 +66,7 @@ If you want local audit logs while testing with Claude Desktop, place flags befo
 {
   "mcpServers": {
     "filesystem": {
-      "command": "C:\\path\\to\\mcp-filesystem-server.exe",
+      "command": "C:\\path\\to\\mcp-filesystem-go-light.exe",
       "args": [
         "--dev",
         "--log-dir",

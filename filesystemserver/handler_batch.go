@@ -145,6 +145,11 @@ func (fs *FilesystemHandler) processBatchMove(ctx context.Context, operation map
 		return "", fmt.Errorf("invalid source path: %v", err)
 	}
 
+	// Protect allowed directories from being moved
+	if fs.isAllowedDir(validFrom) {
+		return "", fmt.Errorf("cannot move allowed directory %s — this is a protected root path", from)
+	}
+
 	validTo, err := fs.validatePath(to)
 	if err != nil {
 		return "", fmt.Errorf("invalid destination path: %v", err)
@@ -211,6 +216,11 @@ func (fs *FilesystemHandler) processBatchDelete(ctx context.Context, operation m
 	validPath, err := fs.validatePath(path)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %v", err)
+	}
+
+	// Protect allowed directories from deletion
+	if fs.isAllowedDir(validPath) {
+		return "", fmt.Errorf("cannot delete allowed directory %s — this is a protected root path", path)
 	}
 
 	info, err := os.Stat(validPath)

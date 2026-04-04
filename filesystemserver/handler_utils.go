@@ -622,6 +622,16 @@ func (fs *FilesystemHandler) handleMoveFile(ctx context.Context, request mcp.Cal
 		}, nil
 	}
 
+	// Protect allowed directories from being moved
+	if fs.isAllowedDir(validSource) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{Type: "text", Text: fmt.Sprintf("Error: cannot move allowed directory %s — this is a protected root path", source)},
+			},
+			IsError: true,
+		}, nil
+	}
+
 	validDest, err := fs.validatePath(destination)
 	if err != nil {
 		return &mcp.CallToolResult{

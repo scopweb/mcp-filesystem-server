@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scopweb/mcp-filesystem-server/internal/dashboardapi"
-	"github.com/scopweb/mcp-filesystem-server/internal/logview"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/dashboardapi"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/logview"
 )
 
 type dashboardData struct {

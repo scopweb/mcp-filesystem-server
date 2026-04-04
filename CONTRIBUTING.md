@@ -13,14 +13,14 @@
 
 ```bash
 # Clone
-git clone https://github.com/scopweb/mcp-filesystem-server.git
-cd mcp-filesystem-server
+git clone https://github.com/scopweb/mcp-filesystem-go-light.git
+cd mcp-filesystem-go-light
 
 # Test
 go test ./filesystemserver -v
 
 # Build
-go build -o mcp-filesystem-server .
+go build -o mcp-filesystem-go-light .
 ```
 
 ## Guidelines

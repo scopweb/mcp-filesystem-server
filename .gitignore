@@ -4,8 +4,8 @@
 *.dll
 *.so
 *.dylib
-mcp-filesystem-server
-mcp-filesystem-server-enhanced
+mcp-filesystem-go-light
+mcp-filesystem-go-light-enhanced
 
 # Go build
 dist/
@@ -45,11 +45,7 @@ fix-git-remotes.*
 verify-status.*
 
 # Temp docs
-FIXES_NEEDED.md
-FORK-GUIDE.md
-PROYECTO_COMPLETADO.md
-RESUMEN_CAMBIOS_TESTS.md
-MANUAL_GITHUB.md
+___*.md
 
 # Environment
 .env

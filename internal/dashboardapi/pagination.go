@@ -3,7 +3,7 @@ package dashboardapi
 import (
 	"strings"
 
-	"github.com/scopweb/mcp-filesystem-server/internal/logview"
+	"github.com/scopweb/mcp-filesystem-go-light/internal/logview"
 )
 
 type AuditPage struct {
