@@ -46,6 +46,11 @@ verify-status.*
 
 # Temp docs
 ___*.md
+.code-workspace
+
+# AI agent skills (local tooling, not for repo)
+.github/skills/
+.copilot/
 
 # Environment
 .env
