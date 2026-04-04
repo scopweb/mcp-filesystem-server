@@ -61,9 +61,7 @@ func TestValidatePath_EmptyPath(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// Empty path resolves to cwd which is likely outside allowed dirs
 	_, err = handler.validatePath("")
-	// Either error or the resolved path must be inside allowed dirs
 	if err == nil {
 		t.Log("empty path resolved without error — cwd may be inside allowed dirs")
 	}
@@ -74,9 +72,7 @@ func TestValidatePath_DotPath(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// "." resolves to cwd
 	_, err = handler.validatePath(".")
-	// Should be rejected unless cwd is in allowed dirs
 	if err != nil {
 		assert.Contains(t, err.Error(), "access denied")
 	}
@@ -94,11 +90,9 @@ func TestValidatePath_SymlinkOutsideAllowedDirs(t *testing.T) {
 	allowed := t.TempDir()
 	outside := t.TempDir()
 
-	// Create a file outside allowed dirs
 	secretFile := filepath.Join(outside, "secret.txt")
 	require.NoError(t, os.WriteFile(secretFile, []byte("secret"), 0644))
 
-	// Create symlink inside allowed dir pointing outside
 	linkPath := filepath.Join(allowed, "evil_link")
 	require.NoError(t, os.Symlink(secretFile, linkPath))
 
@@ -118,7 +112,6 @@ func TestValidatePath_SymlinkDirOutsideAllowedDirs(t *testing.T) {
 	allowed := t.TempDir()
 	outside := t.TempDir()
 
-	// Create symlink to directory outside allowed dirs
 	linkPath := filepath.Join(allowed, "evil_dir_link")
 	require.NoError(t, os.Symlink(outside, linkPath))
 
@@ -137,7 +130,6 @@ func TestValidatePath_SymlinkInsideAllowedDirs(t *testing.T) {
 
 	allowed := t.TempDir()
 
-	// Create a real file and a symlink both inside allowed dirs
 	realFile := filepath.Join(allowed, "real.txt")
 	require.NoError(t, os.WriteFile(realFile, []byte("ok"), 0644))
 	linkPath := filepath.Join(allowed, "safe_link")
@@ -159,7 +151,6 @@ func TestValidatePath_NestedSymlinkChain(t *testing.T) {
 	allowed := t.TempDir()
 	outside := t.TempDir()
 
-	// Create chain: link1 → link2 → outside/secret
 	secretFile := filepath.Join(outside, "secret.txt")
 	require.NoError(t, os.WriteFile(secretFile, []byte("secret"), 0644))
 
@@ -220,7 +211,6 @@ func TestValidatePath_BackslashNormalization(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// Use forward slashes on Windows — should still resolve
 	forwardSlashPath := strings.ReplaceAll(testFile, `\`, `/`)
 	resolved, err := handler.validatePath(forwardSlashPath)
 	assert.NoError(t, err)
@@ -251,10 +241,64 @@ func TestValidatePath_UNCPath(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// UNC paths should be rejected (outside allowed dirs)
 	_, err = handler.validatePath(`\\server\share\file.txt`)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access denied")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Path Validation — WSL paths
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestNormalizeWSLPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("WSL path normalization only applies on Windows")
+	}
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/mnt/c/Users/DAVID", `C:\Users\DAVID`},
+		{"/mnt/c/Users/DAVID/Documents", `C:\Users\DAVID\Documents`},
+		{"/mnt/d/Projects/repo", `D:\Projects\repo`},
+		{"/mnt/c", `C:\`},
+		{"/mnt/C/Users", `C:\Users`},
+		{"C:\\Users\\DAVID", `C:\Users\DAVID`},
+		{"/mnt/", "/mnt/"},
+		{"/mnt/cifs/share", "/mnt/cifs/share"},
+		{"relative/path", "relative/path"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeWSLPath(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestValidatePath_WSLStyle(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("WSL path test only applies on Windows")
+	}
+
+	dir := t.TempDir()
+	handler, err := NewFilesystemHandler([]string{dir})
+	require.NoError(t, err)
+
+	wslPath := "/mnt/" + strings.ToLower(strings.ReplaceAll(
+		strings.Replace(dir, ":", "", 1),
+		`\`, "/",
+	))
+
+	testFile := filepath.Join(dir, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("hello"), 0644))
+
+	wslFilePath := wslPath + "/test.txt"
+	resolved, err := handler.validatePath(wslFilePath)
+	assert.NoError(t, err, "path WSL dins allowed dir hauria de ser acceptat")
+	assert.Equal(t, testFile, resolved)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,7 +318,6 @@ func TestValidatePath_UnicodeFilenames(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, unicodeFile, resolved)
 
-	// Verify it works end-to-end via read_file
 	request := mcp.CallToolRequest{}
 	request.Params.Name = "read_file"
 	request.Params.Arguments = map[string]any{"path": unicodeFile}
@@ -303,7 +346,6 @@ func TestValidatePath_SpacesInPath(t *testing.T) {
 func TestValidatePath_DeepNesting(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a deeply nested path (10 levels)
 	nested := dir
 	for i := 0; i < 10; i++ {
 		nested = filepath.Join(nested, fmt.Sprintf("level%d", i))
@@ -325,7 +367,6 @@ func TestValidatePath_NonExistentFileInAllowedDir(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// Non-existent file inside allowed dir — should succeed (for write_file)
 	newFile := filepath.Join(dir, "new_file.txt")
 	resolved, err := handler.validatePath(newFile)
 	assert.NoError(t, err)
@@ -337,7 +378,6 @@ func TestValidatePath_AllowedDirItself(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir})
 	require.NoError(t, err)
 
-	// The allowed directory itself should be valid
 	resolved, err := handler.validatePath(dir)
 	assert.NoError(t, err)
 	assert.Equal(t, dir, resolved)
@@ -399,7 +439,6 @@ func TestRefreshRoots_ReplacesAllowedDirs(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir1})
 	require.NoError(t, err)
 
-	// Initial state: only dir1 allowed
 	assert.Len(t, handler.allowedDirs, 1)
 
 	handler.requestRootsFn = func(ctx context.Context) ([]string, error) {
@@ -408,7 +447,6 @@ func TestRefreshRoots_ReplacesAllowedDirs(t *testing.T) {
 
 	handler.refreshRoots(context.Background())
 
-	// After refresh: dir2 replaces dir1
 	handler.mu.RLock()
 	dirs := handler.allowedDirs
 	handler.mu.RUnlock()
@@ -429,8 +467,6 @@ func TestRefreshRoots_ErrorKeepsExistingDirs(t *testing.T) {
 	}
 
 	handler.refreshRoots(context.Background())
-
-	// Dirs should remain unchanged
 	assert.Equal(t, originalDirs, handler.allowedDirs)
 }
 
@@ -446,7 +482,6 @@ func TestRefreshRoots_EmptyResultKeepsExistingDirs(t *testing.T) {
 	}
 
 	handler.refreshRoots(context.Background())
-
 	assert.Equal(t, originalDirs, handler.allowedDirs)
 }
 
@@ -456,8 +491,7 @@ func TestRefreshRoots_NilFnIsNoop(t *testing.T) {
 	require.NoError(t, err)
 
 	handler.requestRootsFn = nil
-	handler.refreshRoots(context.Background()) // should not panic
-
+	handler.refreshRoots(context.Background())
 	assert.Len(t, handler.allowedDirs, 1)
 }
 
@@ -493,11 +527,9 @@ func TestTryFetchRoots_OnlyRunsOnce(t *testing.T) {
 		return []string{dir}, nil
 	}
 
-	// First call should fetch
 	assert.True(t, handler.tryFetchRoots(context.Background()))
 	assert.Equal(t, 1, callCount)
 
-	// Second call should be no-op (rootsFetched = true, and now has allowedDirs)
 	assert.False(t, handler.tryFetchRoots(context.Background()))
 	assert.Equal(t, 1, callCount)
 }
@@ -512,7 +544,7 @@ func TestTryFetchRoots_ErrorReturnsFalse(t *testing.T) {
 
 	fetched := handler.tryFetchRoots(context.Background())
 	assert.False(t, fetched)
-	assert.True(t, handler.rootsFetched) // still marked as fetched to avoid retries
+	assert.True(t, handler.rootsFetched)
 }
 
 func TestTryFetchRoots_NilFnReturnsFalse(t *testing.T) {
@@ -613,7 +645,6 @@ func TestConcurrentRefreshRoots(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Should not panic and dirs should be valid
 	handler.mu.RLock()
 	dirs := handler.allowedDirs
 	handler.mu.RUnlock()
@@ -702,7 +733,7 @@ func TestHandleReadResource_OutsideAllowedDirs(t *testing.T) {
 func TestMultipleAllowedDirs(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
-	dir3 := t.TempDir() // not allowed
+	dir3 := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir1, "f1.txt"), []byte("one"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir2, "f2.txt"), []byte("two"), 0644))
@@ -711,15 +742,12 @@ func TestMultipleAllowedDirs(t *testing.T) {
 	handler, err := NewFilesystemHandler([]string{dir1, dir2})
 	require.NoError(t, err)
 
-	// dir1 — allowed
 	_, err = handler.validatePath(filepath.Join(dir1, "f1.txt"))
 	assert.NoError(t, err)
 
-	// dir2 — allowed
 	_, err = handler.validatePath(filepath.Join(dir2, "f2.txt"))
 	assert.NoError(t, err)
 
-	// dir3 — not allowed
 	_, err = handler.validatePath(filepath.Join(dir3, "f3.txt"))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access denied")
@@ -752,7 +780,6 @@ func TestEditFile_DryRun(t *testing.T) {
 	text := result.Content[0].(mcp.TextContent).Text
 	assert.Contains(t, text, "Dry run")
 
-	// File should be unchanged
 	content, _ := os.ReadFile(filePath)
 	assert.Equal(t, "hello world", string(content))
 }
@@ -784,7 +811,6 @@ func TestEditFile_LargeEditTip(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "large.txt")
 
-	// Create file with many lines to trigger the >10 lines tip
 	var lines []string
 	for i := 0; i < 20; i++ {
 		lines = append(lines, fmt.Sprintf("line %d: old value", i))
@@ -858,14 +884,13 @@ func TestMoveFile_DestOutsideAllowed(t *testing.T) {
 	assert.True(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "access denied")
 
-	// Verify original file still exists
 	_, statErr := os.Stat(srcFile)
 	assert.NoError(t, statErr)
 }
 
-// ─────────────────��─────────────────────────────────────────���─────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Protected allowed directories — cannot delete or move root paths
-// ───────���─────────────────��───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 func TestDeleteFile_CannotDeleteAllowedDir(t *testing.T) {
 	allowed := t.TempDir()
@@ -885,7 +910,6 @@ func TestDeleteFile_CannotDeleteAllowedDir(t *testing.T) {
 	assert.True(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "protected root path")
 
-	// Verify directory still exists
 	_, statErr := os.Stat(allowed)
 	assert.NoError(t, statErr)
 }
@@ -909,7 +933,6 @@ func TestMoveFile_CannotMoveAllowedDir(t *testing.T) {
 	assert.True(t, result.IsError)
 	assert.Contains(t, fmt.Sprint(result.Content[0]), "protected root path")
 
-	// Verify directory still exists
 	_, statErr := os.Stat(allowed)
 	assert.NoError(t, statErr)
 }
@@ -933,7 +956,6 @@ func TestDeleteFile_CanDeleteSubdirOfAllowed(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 
-	// Verify subdir deleted but allowed dir still exists
 	_, statErr := os.Stat(subdir)
 	assert.True(t, os.IsNotExist(statErr))
 	_, statErr = os.Stat(allowed)

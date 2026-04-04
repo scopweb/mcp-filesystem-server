@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -146,8 +147,39 @@ func NewFilesystemHandler(allowedDirs []string) (*FilesystemHandler, error) {
 	}, nil
 }
 
+// normalizeWSLPath converts WSL-style paths to Windows paths on Windows.
+// /mnt/c/Users/foo → C:\Users\foo
+// Paths that don't match the WSL pattern are returned unchanged.
+func normalizeWSLPath(path string) string {
+	if runtime.GOOS != "windows" {
+		return path
+	}
+	// Match /mnt/<letter>/... or /mnt/<letter> (drive root)
+	if !strings.HasPrefix(path, "/mnt/") {
+		return path
+	}
+	rest := path[len("/mnt/"):]
+	if len(rest) == 0 {
+		return path
+	}
+	driveLetter := rest[0]
+	if !((driveLetter >= 'a' && driveLetter <= 'z') || (driveLetter >= 'A' && driveLetter <= 'Z')) {
+		return path
+	}
+	suffix := rest[1:] // everything after the drive letter
+	if suffix == "" {
+		return strings.ToUpper(string(driveLetter)) + `:\`
+	}
+	if suffix[0] != '/' {
+		return path // e.g. /mnt/cifs/... — not a drive letter path
+	}
+	suffix = strings.ReplaceAll(suffix[1:], "/", `\`)
+	return strings.ToUpper(string(driveLetter)) + `:\` + suffix
+}
+
 // validatePath checks if a path is within allowed directories
 func (fs *FilesystemHandler) validatePath(requestedPath string) (string, error) {
+	requestedPath = normalizeWSLPath(requestedPath)
 	abs, err := filepath.Abs(requestedPath)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
@@ -233,8 +265,18 @@ func (fs *FilesystemHandler) isPathInAllowedDirs(path string) bool {
 	dirs := fs.allowedDirs
 	fs.mu.RUnlock()
 
+	// Windows is case-insensitive: compare lowercased paths
+	cmpPath := absPath
+	if runtime.GOOS == "windows" {
+		cmpPath = strings.ToLower(absPath)
+	}
+
 	for _, dir := range dirs {
-		if strings.HasPrefix(absPath, dir) {
+		cmpDir := dir
+		if runtime.GOOS == "windows" {
+			cmpDir = strings.ToLower(dir)
+		}
+		if strings.HasPrefix(cmpPath, cmpDir) {
 			return true
 		}
 	}
