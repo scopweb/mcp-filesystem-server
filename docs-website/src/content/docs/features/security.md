@@ -26,6 +26,27 @@ Every file operation goes through path validation:
 
 If any check fails, the operation is rejected before touching the filesystem.
 
+### WSL Path Conversion (v1.1.0)
+
+On Windows, WSL-style paths like `/mnt/c/Users/foo` are automatically converted to `C:\Users\foo` before validation. This prevents false "access denied" errors when tools are called from WSL environments.
+
+### Case-Insensitive Validation (Windows)
+
+On Windows, path comparison against the allow-list is case-insensitive. This fixes scenarios where `c:\users\foo` and `C:\Users\foo` refer to the same directory but would fail strict string comparison.
+
+### Blocked Attack Vectors
+
+The following attack vectors are tested and blocked:
+
+| Vector | Example | Result |
+|--------|---------|--------|
+| Path traversal | `../../etc/passwd` | Blocked |
+| WSL path injection | `/mnt/c/Windows/System32` | Converted + validated |
+| Win32 namespace | `\\?\C:\secret` | Blocked |
+| Device paths | `//./COM1` | Blocked |
+| Forward-slash bypass | `C:/Windows/System32` | Normalized + validated |
+| Cross-dir exfiltration | `copy_file` / `move_file` to outside allowed dirs | Blocked (destination validated) |
+
 ## Allow-list
 
 ### CLI arguments

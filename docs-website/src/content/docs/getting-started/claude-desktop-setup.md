@@ -78,9 +78,18 @@ If you want local audit logs while testing with Claude Desktop, place flags befo
 }
 ```
 
-- `--dev --log-dir C:\\mcp-logs` writes `operations.jsonl` and `metrics.json`.
+- `--dev --log-dir C:\\mcp-logs` writes two files:
+  - **`operations.jsonl`** — one JSON line per tool call, including: tool name, raw and normalized arguments, result summary, duration, sub-operation traces (e.g. `edit.parse_arguments`, `edit.validate_path`), and any errors.
+  - **`metrics.json`** — aggregated stats: call counts per tool, average durations, error rates.
 - Allowed directories must come after the flags because the server reads them from positional arguments.
-- To inspect logs locally, run `go run ./cmd/logdashboard --log-dir C:\\mcp-logs --addr :8091` and open `http://127.0.0.1:8091`.
+
+**Inspecting logs:**
+
+| Method | Command |
+|--------|---------|
+| Dashboard (browser) | `go run ./cmd/logdashboard --log-dir C:\\mcp-logs --addr :8091` → open `http://127.0.0.1:8091` |
+| CLI viewer | `go run ./cmd/logview --log-dir C:\\mcp-logs` — shows recent operations, errors, and timings in the terminal |
+| Proxy correlation | `go run ./cmd/proxy` — injects `request_id` traces into `proxy.jsonl` for end-to-end debugging |
 
 :::caution
 Only allow directories you trust. The server has full read/write access within allowed paths.

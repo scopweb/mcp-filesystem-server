@@ -208,3 +208,44 @@ For clients trained on the [official MCP filesystem server](https://github.com/m
 | `directory_tree` | `tree` | Hierarchical directory tree |
 
 Both names work — use whichever your client expects.
+
+## Discovery
+
+### `help`
+
+Returns the full catalog of all 18 tools with usage rules, parameters, and best practices. Call this **first** in every conversation to ensure all tools are discovered — Claude Desktop's lazy loading may otherwise miss most tools.
+
+No parameters.
+
+:::tip
+The `/filesystem-light-tools` Claude Code skill automates this: it instructs the AI to call `help` at the start of every conversation.
+:::
+
+## MCP Annotations
+
+### Tool Title Annotations
+
+All tools include `WithTitleAnnotation()` for better display in client UIs. For example, `read_file` has the title "Read File".
+
+### Content Annotations
+
+Response content includes `audience` annotations so clients can route output appropriately:
+
+| Tool type | Audience | Reason |
+|-----------|----------|--------|
+| Read tools (`read_file`, `search`, `tree`, etc.) | `["assistant"]` | Output is for the AI to process, not shown raw to the user |
+| Write tools (`write_file`, `edit_file`, etc.) | `["user", "assistant"]` | Confirmation should be visible to both |
+
+### Tool Hints
+
+All tools carry MCP hint annotations:
+
+| Hint | Meaning |
+|------|---------|
+| `readOnlyHint: true` | Tool does not modify the filesystem |
+| `destructiveHint: true` | Tool may delete or overwrite data |
+| `idempotentHint: true` | Calling multiple times has the same effect |
+
+### Progress Notifications
+
+`batch_operations` and `read_multiple_files` send `notifications/progress` updates during execution, allowing clients to show progress bars or status indicators for long-running operations.

@@ -7,28 +7,50 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-04-04
+
+### Fixed
+- **`tree` duplicate content** — removed spurious `EmbeddedResource` block appended alongside `TextContent`; clients were receiving the JSON tree twice.
+- **`write_file` base64 encoding** — `encoding:"base64"` parameter was ignored; file was written as literal base64 text instead of decoded binary bytes. Now correctly decodes and writes raw bytes.
+- **WSL path conversion** — paths like `/mnt/c/Users/foo` were resolved to `C:\mnt\c\Users\foo` instead of `C:\Users\foo`. New `normalizeWSLPath()` function converts WSL-style paths to Windows paths before resolution.
+- **Case-insensitive path validation on Windows** — `isPathInAllowedDirs` now compares lowercased paths on Windows, fixing false "access denied" errors when WSL paths (lowercase drive letter) were checked against allowed dirs (mixed case).
+
+### Security
+- **Exhaustive security validation** — manual tests confirmed all attack vectors are blocked: path traversal (`../`), WSL path injection (`/mnt/c/`), Win32 namespace (`\\?\`), device paths (`//./`), forward slashes (`C:/`), and cross-allowed-dir exfiltration via `copy_file`/`move_file`.
+
 ### Added
-- **Official MCP compatibility aliases** — 3 tool name aliases for clients trained on the official MCP filesystem server: `read_text_file` → `read_file`, `search_files` → `search`, `directory_tree` → `tree`.
+- **Official MCP compatibility aliases** — 3 tool name aliases for clients trained on the official MCP filesystem server: `read_text_file` → `read_file`, `search_files` → `search`, `directory_tree` → `tree`. Full parameter schemas, same handlers.
 - **Recommended workflow in instructions** — 5-step workflow (navigate → locate → read range → edit → verify) sent during MCP initialize.
 - **`edit_file` large-edit tip** — success message includes a TIP to use `compare_files` when edits affect >10 lines.
-- **`/filesystem-light-tools` skill** — Claude Code skill for tool discovery. Solves Claude Desktop's lazy tool loading.
-- **`help` tool** — returns the full tool catalog with usage rules and best practices.
-- **`server.WithInstructions()`** — sends tool catalog during MCP initialize handshake.
-- **`read_file` outline mode** — symbol index for 14 languages with line numbers.
-- **`list_directory` depth** — multi-level recursive listing (1-10).
-- **MCP logging, progress notifications, content annotations, tool titles** — full MCP spec compliance.
-- **Roots change notifications** — refreshes allowed directories mid-session.
-- **Context cancellation** — cooperative cancellation across all operations.
-- **Development audit logging** — `--dev --log-dir` mode with `operations.jsonl` and `metrics.json`.
-- **Log inspection tools** — `cmd/logview`, `cmd/logdashboard`, and local dashboard.
+- **`/filesystem-light-tools` skill** — Claude Code skill for tool discovery. Solves Claude Desktop's lazy tool loading problem: without this, only ~5 of 18 tools are discovered per query.
+- **`help` tool** — returns the full catalog of 18 tools with usage rules, parameters, and best practices. Description is keyword-rich so Claude Desktop's semantic search picks it up for virtually any filesystem query.
+- **`server.WithInstructions()`** — sends tool catalog during MCP initialize handshake (spec 2025-11-25 compliant).
+- **`read_file` outline mode** — new `outline` boolean param. Returns a symbol index (functions, classes, types, interfaces with line numbers) using regex extraction for 14 languages.
+- **`list_directory` depth** — new `depth` param (1-10). Multi-level recursive listing without using `tree`.
+- **MCP logging capability** — handler can send `notifications/message` log events to clients.
+- **Progress notifications** — `batch_operations` and `read_multiple_files` send progress updates via `notifications/progress`.
+- **Content annotations** — read tools annotate output with `audience: ["assistant"]`, write tools with `audience: ["user", "assistant"]`.
+- **Tool title annotations** — all tools have `WithTitleAnnotation()` for better client UI display.
+- **Roots change notifications** — handler listens for `notifications/roots/list_changed` and refreshes allowed directories mid-session.
+- **Context cancellation** — cooperative cancellation across all operations via `ctx.Done()`.
+- **Development audit logging** — `--dev --log-dir` mode with `operations.jsonl` and `metrics.json`. Records raw/normalized arguments and sub-operation traces.
+- **Log inspection tools** — `cmd/logview`, `cmd/logdashboard`, and local dashboard for inspecting operations, errors, timings, and request parameters.
 
 ### Testing
 - **40 security and edge-case tests** — directory traversal, symlink attacks, Windows paths, roots lifecycle, concurrency, resource handler, copy/move destination validation, edit_file features.
+- `TestWriteFile_Base64` — verifies binary content is written correctly, not base64 literal text.
+- `TestWriteFile_Base64_InvalidInput` — verifies invalid base64 returns a proper error.
+- `TestTree_NoDuplicateContent` — verifies tree returns exactly 1 content item.
+- `TestNormalizeWSLPath` — 9 subtests covering drive letters, root paths, uppercase, non-drive `/mnt/` paths, and passthrough cases.
+- `TestValidatePath_WSLStyle` — end-to-end test: creates file via Windows path, accesses via WSL path, verifies resolution.
 
 ### Changed
 - **Tool descriptions rewritten for discoverability** — action keywords, recommended workflows, reduced cross-reference noise. Optimized for Claude Desktop's semantic tool search.
-- **Tool errors** — `IsError: true` (tool-level) instead of protocol-level errors.
+- **Tool errors** — `IsError: true` (tool-level) instead of protocol-level errors, per MCP spec.
 - **Output sanitization** — 1MB truncation and UTF-8 validation in post-processing.
+- **Resource capabilities** — changed to `(false, false)` to avoid overcommitting capabilities not implemented.
 
 ---
 
