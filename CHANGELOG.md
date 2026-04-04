@@ -4,6 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-04
+
+### Fixed
+- **`tree` duplicate content** — removed spurious `EmbeddedResource` block appended alongside `TextContent`; clients were receiving the JSON tree twice.
+- **`write_file` base64 encoding** — `encoding:"base64"` parameter was ignored; file was written as literal base64 text instead of decoded binary bytes. Now correctly decodes and writes raw bytes.
+- **WSL path conversion** — paths like `/mnt/c/Users/foo` were resolved to `C:\mnt\c\Users\foo` instead of `C:\Users\foo`. New `normalizeWSLPath()` function in `validatePath` converts WSL-style paths to Windows paths before resolution.
+- **Case-insensitive path validation on Windows** — `isPathInAllowedDirs` now compares lowercased paths on Windows, fixing false "access denied" errors when WSL paths (lowercase drive letter) were checked against allowed dirs (mixed case).
+
+### Security
+- **Exhaustive security validation** — manual tests confirmed all attack vectors are blocked: path traversal (`../`), WSL path injection (`/mnt/c/`), Win32 namespace (`\\?\`), device paths (`//./`), forward slashes (`C:/`), and cross-allowed-dir exfiltration via `copy_file`/`move_file`.
+
+### Testing
+- Added `TestWriteFile_Base64` — verifies binary content is written correctly, not base64 literal text.
+- Added `TestWriteFile_Base64_InvalidInput` — verifies invalid base64 returns a proper error.
+- Added `TestTree_NoDuplicateContent` — verifies tree returns exactly 1 content item.
+- Added `TestNormalizeWSLPath` — 9 subtests covering drive letters, root paths, uppercase, non-drive `/mnt/` paths, and passthrough cases.
+- Added `TestValidatePath_WSLStyle` — end-to-end test: creates file via Windows path, accesses via WSL path, verifies resolution.
+
 ### Added
 - **Official MCP compatibility aliases** — 3 tool name aliases for clients trained on the official `modelcontextprotocol/servers` filesystem server: `read_text_file` → `read_file`, `search_files` → `search`, `directory_tree` → `tree`. Full parameter schemas, same handlers.
 - **Recommended workflow in instructions** — `serverInstructions` now includes a 5-step workflow (navigate → locate → read range → edit → verify) sent during MCP initialize.
