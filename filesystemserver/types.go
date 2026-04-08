@@ -206,6 +206,9 @@ type EditResult struct {
 	ReplacementCount int
 	MatchConfidence  string
 	LinesAffected    int
+	LinesAdded       int // Lines added (+N in diff format)
+	LinesRemoved     int // Lines removed (-M in diff format)
+	TotalLines       int // Total lines in file after edit
 }
 
 // SplitResult represents file split operation results

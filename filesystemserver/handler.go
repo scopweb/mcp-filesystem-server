@@ -143,8 +143,8 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 			Content: []mcp.Content{
 				mcp.TextContent{
 					Type: "text",
-					Text: fmt.Sprintf("🔍 Dry run — no changes written\n📊 Would make: %d replacement(s)\n🎯 Match confidence: %s\n\n%s",
-						result.ReplacementCount, result.MatchConfidence, diff),
+					Text: fmt.Sprintf("🔍 Dry run — no changes written\n📊 Would make: %d replacement(s) (+%d -%d) | %d lines\n🎯 Match confidence: %s\n\n%s",
+						result.ReplacementCount, result.LinesAdded, result.LinesRemoved, result.TotalLines, result.MatchConfidence, diff),
 				},
 			},
 		}, nil
@@ -164,8 +164,8 @@ func (fs *FilesystemHandler) handleEditFile(ctx context.Context, request mcp.Cal
 		Content: []mcp.Content{
 			mcp.TextContent{
 				Type: "text",
-				Text: fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s)\n🎯 Match confidence: %s\n📝 Lines affected: %d",
-					path, result.ReplacementCount, result.MatchConfidence, result.LinesAffected),
+				Text: fmt.Sprintf("✅ Successfully edited %s\n📊 Changes: %d replacement(s) (+%d -%d) | %d lines\n🎯 Match confidence: %s",
+					path, result.ReplacementCount, result.LinesAdded, result.LinesRemoved, result.TotalLines, result.MatchConfidence),
 			},
 			mcp.EmbeddedResource{
 				Type: "resource",

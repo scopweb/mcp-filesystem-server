@@ -166,17 +166,25 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 	oldText = normalizeLineEndings(oldText)
 	newText = normalizeLineEndings(newText)
 
+	originalLines := strings.Count(content, "\n") + 1
+
 	// Fast path: Check exact match primero (más común)
 	if idx := strings.Index(content, oldText); idx >= 0 {
 		newContent := strings.ReplaceAll(content, oldText, newText)
 		replacements := strings.Count(content, oldText)
 		linesAffected := calculateLinesWithText(content, oldText)
-		
+		oldTextLines := strings.Count(oldText, "\n") + 1
+		newTextLines := strings.Count(newText, "\n") + 1
+		totalLines := strings.Count(newContent, "\n") + 1
+
 		return &EditResult{
 			ModifiedContent:  newContent,
 			ReplacementCount: replacements,
 			MatchConfidence:  "high",
 			LinesAffected:    linesAffected,
+			LinesRemoved:     oldTextLines * replacements,
+			LinesAdded:       newTextLines * replacements,
+			TotalLines:       totalLines,
 		}, nil
 	}
 
@@ -194,6 +202,9 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			ReplacementCount: 0,
 			MatchConfidence:  "already_present",
 			LinesAffected:    0,
+			LinesAdded:       0,
+			LinesRemoved:     0,
+			TotalLines:       originalLines,
 		}, nil
 	}
 
@@ -208,11 +219,16 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			}
 			newContent := strings.ReplaceAll(content, fixedOld, replacement)
 			linesAffected := strings.Count(fixedOld, "\n") + 1
+			oldLines := strings.Count(fixedOld, "\n") + 1
+			newLines := strings.Count(replacement, "\n") + 1
 			return &EditResult{
 				ModifiedContent:  newContent,
 				ReplacementCount: countFixed,
 				MatchConfidence:  "high_after_escape_fix",
 				LinesAffected:    linesAffected,
+				LinesRemoved:     oldLines * countFixed,
+				LinesAdded:       newLines * countFixed,
+				TotalLines:       strings.Count(newContent, "\n") + 1,
 			}, nil
 		}
 	}
@@ -258,6 +274,9 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 				ReplacementCount: 1,
 				MatchConfidence:  "medium",
 				LinesAffected:    strings.Count(oldText, "\n") + 1,
+				LinesRemoved:     strings.Count(oldText, "\n") + 1,
+				LinesAdded:       strings.Count(newText, "\n") + 1,
+				TotalLines:       strings.Count(newContent, "\n") + 1,
 			}, nil
 		}
 
@@ -271,11 +290,18 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 			matches := re.FindAllString(content, -1)
 			if len(matches) > 0 {
 				newContent := re.ReplaceAllString(content, newText)
+				totalRemoved := 0
+				for _, m := range matches {
+					totalRemoved += strings.Count(m, "\n") + 1
+				}
 				return &EditResult{
 					ModifiedContent:  newContent,
 					ReplacementCount: len(matches),
 					MatchConfidence:  "low",
 					LinesAffected:    countAffectedLines(content, matches),
+					LinesRemoved:     totalRemoved,
+					LinesAdded:       (strings.Count(newText, "\n") + 1) * len(matches),
+					TotalLines:       strings.Count(newContent, "\n") + 1,
 				}, nil
 			}
 		}
@@ -283,11 +309,17 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 
 	// Si encontramos reemplazos, devolver el resultado
 	if replacements > 0 {
+		modifiedContent := strings.Join(newLines, "\n")
+		totalLines := strings.Count(modifiedContent, "\n") + 1
+		// Line-by-line replacements: each affected line is removed and re-added
 		return &EditResult{
-			ModifiedContent:  strings.Join(newLines, "\n"),
+			ModifiedContent:  modifiedContent,
 			ReplacementCount: replacements,
 			MatchConfidence:  "medium",
 			LinesAffected:    affectedLines,
+			LinesRemoved:     affectedLines,
+			LinesAdded:       affectedLines,
+			TotalLines:       totalLines,
 		}, nil
 	}
 
@@ -297,6 +329,9 @@ func (fs *FilesystemHandler) performIntelligentEdit(content, oldText, newText st
 		ReplacementCount: 0,
 		MatchConfidence:  "none",
 		LinesAffected:    0,
+		LinesAdded:       0,
+		LinesRemoved:     0,
+		TotalLines:       originalLines,
 	}, nil
 }
 

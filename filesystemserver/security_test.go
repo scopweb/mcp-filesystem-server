@@ -832,7 +832,7 @@ func TestEditFile_LargeEditTip(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	text := result.Content[0].(mcp.TextContent).Text
-	assert.Contains(t, text, "Lines affected: 20")
+	assert.Contains(t, text, "(+20 -20) | 20 lines")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
